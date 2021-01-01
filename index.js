@@ -2,6 +2,19 @@
 TODO: read all posts backwards in order to show the NEWEST posts FIRST
  */
 
+
+// Setting up the authentication library
+ var sqlite3 = require("sqlite3");
+ let db = new sqlite3.Database("Authentication.db", sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, err => {
+ 	if (err) { console.error(err.message); }
+ 	console.log("Connected to the authentication database.");
+ });
+
+// Creating the table for the first time, also shows the table structure. Lots of info incase you want to add stuff in the future (forward thinking)
+ db.serialize(() => {
+ 	db.run('CREATE TABLE IF NOT EXISTS "accounts" ("DiscordId" BIGINT NOT NULL UNIQUE, "Username" VARCHAR(50) NOT NULL, "McUsername" VARCHAR(16), "NickName" VARCHAR(50), "Email" VARCHAR(100), "Desciption" TEXT, "Servers" TEXT, "Links" TEXT, "Rank" TINYINT DEFAULT `guest`, "Added" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY("DiscordId"));');
+});
+
 const crypto = require('crypto');
 const express = require('express');
 const compression = require('compression');
@@ -19,6 +32,8 @@ const posts = require('./posts');
 const archive = require('./archive');
 const utils = require('./utils');
 const users = require('./users');
+
+const rankList = ["banned", "guest", "trusted", "editor", "mod", "dev"]; //0=banned, 1=guest, 2=trusted, 3=editor, 4=mod, 5=dev
 
 //assumes that production and development are false and that you need to supply at least one argument
 let production = false, development = false;
@@ -60,7 +75,8 @@ passport.use('discord', new DiscordStrategy({
 	scope: ['identify'],
 	customHeaders: []
 }, (accessToken, refreshToken, profile, callback) => {
-	return callback(null, new users.User(profile.id, profile.username, profile.discriminator, `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png?size=32`));
+	var rank = loginDatabase(profile.id,profile.username);
+	return callback(null, new users.User(profile.id, profile.username, profile.discriminator, `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png?size=32`, rank)); // Added Guest argument to user info
 }));
 app.use(session({
 	secret: crypto.randomBytes(512).toString('base64'),
@@ -72,6 +88,7 @@ app.use(session({
 }));
 app.use(passport.initialize());
 app.use(passport.session());
+app.use(bodyParser.urlencoded({extended : true}));
 app.use(bodyParser.json({limit: '100mb'}));
 app.use(xss());
 app.use(compression());
@@ -146,7 +163,7 @@ const getPosts = async (req, res) => {
 	if (start < 0) start = 0;
 	const q = utils.cast('string', query.q);
 	let myPosts = posts.getAllMetadata();
-	
+
 	if (q) {
 		// TODO: sorting
 	} else {
@@ -156,7 +173,7 @@ const getPosts = async (req, res) => {
 			else return 0;
 		});
 	}
-	
+
 	const length = myPosts.length;
 	if (start > length) start = length;
 	if (start + n > length) n = length - start;
@@ -180,11 +197,40 @@ const logout = (req, res) => {
 	res.redirect('/');
 }
 
-const requireAuth = (req, res, next) => {
+// Adds user to database if they weren't already in the database. Done after discord authentication!
+const loginDatabase = (discordId,username) => {
+	var rank = "guest";
+	db.get("SELECT DiscordId,Rank FROM accounts WHERE DiscordId = ?;",
+	[discordId],
+	(err, row) => {
+		if (row == undefined) { // If user does not exist
+			db.run("insert into accounts(DiscordId,Username) values (?,?)", [discordId,username], (err) => {
+				if (err) {console.error(err.message);}
+				console.log("DiscordId: "+discordId+" - Username: " + username + " was added to the login database!");
+				// Rank would be "guest" so do nothing
+			});
+		} else { // If user exists, just assign
+			rank = (row.Rank || "guest");
+		}
+	});
+	return rank;
+}
+
+const requirePermission = (rankRequired) => (req, res, next) => { //(rankRequired) =>
 	if (!req.isAuthenticated()) {
 		res.status(403).send('Not authenticated');
 	} else {
-		next();
+		if (typeof req.user !== "undefined") {
+			if (rankList.indexOf(req.user.rank) >= rankList.indexOf(rankRequired)) {
+				console.log("requirePermission PASSED!");
+				next();
+			} else {
+				res.status(403).send('Incorrect Permission');
+			}
+		} else {
+			res.status(500).send('An authentication error has occured!');
+		}
+		//next(); - old next() location
 	}
 }
 
@@ -193,9 +239,9 @@ const urlPrefix = production ? "/" : "/api/"
 app.get(urlPrefix + '__getpost__', getPost);
 app.post(urlPrefix + '__getpost__', getPost_);
 
-app.post(urlPrefix + '__newpost__', requireAuth, createPost);
+app.post(urlPrefix + '__newpost__', requirePermission('guest'), createPost);
 
-app.post(urlPrefix + '__editpost__', requireAuth, editPost);
+app.post(urlPrefix + '__editpost__', requirePermission('guest'), editPost);
 
 app.get(urlPrefix + '__listposts__', getPosts);
 
@@ -212,12 +258,10 @@ app.get(urlPrefix + 'auth', (req, res, next) => {
 });
 app.get(urlPrefix + 'auth/success', (req, res, next) => {
 	let callbackUrl = utils.cast('string', req.query.state);
-	if (!callbackUrl) {
-		callbackUrl = '/'
-	}
+	if (!callbackUrl) {callbackUrl = '/';}
 	passport.authenticate('discord', {failureRedirect: '/', successRedirect: callbackUrl})(req, res, next);
 });
-app.get(urlPrefix + 'auth/logout', requireAuth, logout);
+app.get(urlPrefix + 'auth/logout', requirePermission('banned'), logout);
 
 app.get(urlPrefix + "__userinfo__", getUserInfo);
 
