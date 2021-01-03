@@ -234,6 +234,14 @@ const requirePermission = (rankRequired) => (req, res, next) => { //(rankRequire
 	}
 }
 
+// E.x. modifyPermissions(discordId,rankList[0]) || modifyPermissions(discordId,"mod")
+const modifyPermissions = (discordId,rank) => {
+	db.run("UPDATE accounts set Rank = ? WHERE DiscordId = ? LIMIT 1", [rank,discordId], (err) => {
+		if (err) { console.error(err.message);}
+		console.log("Changed Rank for discordId: "+discordId+" to "+rank);
+	});
+}
+
 const urlPrefix = production ? "/" : "/api/"
 
 app.get(urlPrefix + '__getpost__', getPost);
