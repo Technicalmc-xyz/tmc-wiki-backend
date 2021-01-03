@@ -242,6 +242,43 @@ const modifyPermissions = (discordId,rank) => {
 	});
 }
 
+// Will return all information on a single user in the database.
+const getUser = (discordId) => {
+	db.get("SELECT * FROM accounts WHERE DiscordId = ?;",[discordId],(err, row) => {
+		if (row == undefined) { // No users exist, excuse me... WHAT?
+			console.error("That user could not be found");
+			return null;
+		} else { // If user exists, just assign
+			return JSON.parse(row);
+		}
+	});
+}
+
+
+// If no rank is specified it will return a list of all users. Otherwise it will return a list of all users with that rank
+// Returns a JSON list of users, each user has a DiscordId, Username, and Rank. For more info about a user, do getUser(discordId)
+const getUsers = (rank) => {
+	if (rank == null) {
+		db.all("SELECT DiscordId,Username,Rank FROM accounts;",[],(err, rows) => {
+			if (rows == undefined) { // No users exist, excuse me... WHAT?
+				console.error("No users in database?");
+				return null;
+			} else { // If user exists, just assign
+				return JSON.parse(rows);
+			}
+		});
+	} else {
+		db.all("SELECT DiscordId,Username,Rank FROM accounts WHERE Rank = ?;",[rank],(err, rows) => {
+			if (rows == undefined) { // No users exist, excuse me... WHAT?
+				console.error("No users in database with that rank?");
+				return null;
+			} else { // If user exists, just assign
+				return JSON.parse(rows);
+			}
+		});
+	}
+}
+
 const urlPrefix = production ? "/" : "/api/"
 
 app.get(urlPrefix + '__getpost__', getPost);
