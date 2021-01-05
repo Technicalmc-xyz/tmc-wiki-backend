@@ -1,8 +1,6 @@
 /*
 TODO: read all posts backwards in order to show the NEWEST posts FIRST
  */
-
-
 // Setting up the authentication library
  var sqlite3 = require("sqlite3");
  let db = new sqlite3.Database("Authentication.db", sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, err => {
@@ -200,6 +198,7 @@ const logout = (req, res) => {
 // Adds user to database if they weren't already in the database. Done after discord authentication!
 const loginDatabase = (discordId,username) => {
 	var rank = "guest";
+	console.log(typeof discordId)
 	db.get("SELECT DiscordId,Rank FROM accounts WHERE DiscordId = ?;",
 	[discordId],
 	(err, row) => {
@@ -235,10 +234,28 @@ const requirePermission = (rankRequired) => (req, res, next) => { //(rankRequire
 }
 
 // E.x. modifyPermissions(discordId,rankList[0]) || modifyPermissions(discordId,"mod")
-const modifyPermissions = (discordId,rank) => {
-	db.run("UPDATE accounts set Rank = ? WHERE DiscordId = ? LIMIT 1", [rank,discordId], (err) => {
+const modifyPermissions = (req, res) =>{
+	const reqBody = utils.cast('object', req.body);
+	console.log(reqBody.discordId);
+	console.log(reqBody.discordId.toString());
+	const discordId = utils.cast('string', reqBody.discordId);
+	console.log(discordId);
+	const rank = utils.cast('string', reqBody.rank);
+	// make sure the new rank is one of the ranks
+	// if (!rankList.includes(rank)) {
+	// 	res.status(403).send("NOT A RANK")
+	// 	return;
+	// }
+	// // make sure that the length of the discord id is 18
+	// else if (!(discordId.toString().length === 18)){
+	// 	res.status(403).send("DISCORD ID IS NOT 18 CHARS")
+	// 	return;
+	// }
+	db.run("UPDATE accounts set Rank = ? WHERE DiscordId = ?", [rank, BigInt(discordId)], (err) => {
 		if (err) { console.error(err.message);}
 		console.log("Changed Rank for discordId: "+discordId+" to "+rank);
+		getUser(discordId);
+		res.status(200).send("Changed Rank for discordId: "+discordId+" to "+rank);
 	});
 }
 
@@ -249,7 +266,7 @@ const getUser = (discordId) => {
 			console.error("That user could not be found");
 			return null;
 		} else { // If user exists, just assign
-			return JSON.parse(row);
+			console.error(JSON.parse(JSON.stringify(row)));
 		}
 	});
 }
@@ -257,27 +274,28 @@ const getUser = (discordId) => {
 
 // If no rank is specified it will return a list of all users. Otherwise it will return a list of all users with that rank
 // Returns a JSON list of users, each user has a DiscordId, Username, and Rank. For more info about a user, do getUser(discordId)
-const getUsers = (rank) => {
+const getUsers = (rank) => (req, res) => {
 	if (rank == null) {
 		db.all("SELECT DiscordId,Username,Rank FROM accounts;",[],(err, rows) => {
-			if (rows == undefined) { // No users exist, excuse me... WHAT?
+			if (rows ==undefined) { // No users exist, excuse me... WHAT?
 				console.error("No users in database?");
 				return null;
 			} else { // If user exists, just assign
-				return JSON.parse(rows);
+				res.send(JSON.parse(JSON.stringify(rows)));
 			}
 		});
 	} else {
 		db.all("SELECT DiscordId,Username,Rank FROM accounts WHERE Rank = ?;",[rank],(err, rows) => {
 			if (rows == undefined) { // No users exist, excuse me... WHAT?
-				console.error("No users in database with that rank?");
+				res.send("No users in database with that rank?");
 				return null;
 			} else { // If user exists, just assign
-				return JSON.parse(rows);
+				res.send(JSON.parse(JSON.stringify(rows)));
 			}
 		});
 	}
 }
+
 
 const urlPrefix = production ? "/" : "/api/"
 
@@ -294,6 +312,9 @@ app.get(urlPrefix + 'archive/:fileName', archive.download);
 app.get(urlPrefix + 'archive', archive.index);
 app.post(urlPrefix + '__archive-upload__', archive.uploadProcess);
 
+app.get(urlPrefix + '__getalluserperms__', requirePermission('guest' ),getUsers());
+app.post(urlPrefix + '__modifyuserperms__', modifyPermissions);
+
 app.get(urlPrefix + 'auth', (req, res, next) => {
 	let redirect = utils.cast('string', req.query.redirect);
 	if (!redirect) {
@@ -301,11 +322,13 @@ app.get(urlPrefix + 'auth', (req, res, next) => {
 	}
 	passport.authenticate('discord', {state: redirect})(req, res, next);
 });
+
 app.get(urlPrefix + 'auth/success', (req, res, next) => {
 	let callbackUrl = utils.cast('string', req.query.state);
 	if (!callbackUrl) {callbackUrl = '/';}
 	passport.authenticate('discord', {failureRedirect: '/', successRedirect: callbackUrl})(req, res, next);
 });
+
 app.get(urlPrefix + 'auth/logout', requirePermission('banned'), logout);
 
 app.get(urlPrefix + "__userinfo__", getUserInfo);
