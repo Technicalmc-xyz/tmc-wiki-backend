@@ -10,7 +10,7 @@ TODO: read all posts backwards in order to show the NEWEST posts FIRST
 
 // Creating the table for the first time, also shows the table structure. Lots of info incase you want to add stuff in the future (forward thinking)
  db.serialize(() => {
- 	db.run('CREATE TABLE IF NOT EXISTS "accounts" ("DiscordId" BIGINT NOT NULL UNIQUE, "Username" VARCHAR(50) NOT NULL, "McUsername" VARCHAR(16), "NickName" VARCHAR(50), "Email" VARCHAR(100), "Desciption" TEXT, "Servers" TEXT, "Links" TEXT, "Rank" TINYINT DEFAULT `guest`, "Added" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY("DiscordId"));');
+ 	db.run('CREATE TABLE IF NOT EXISTS "accounts" ("DiscordId" VARCHAR(20) NOT NULL UNIQUE, "Username" VARCHAR(50) NOT NULL, "McUsername" VARCHAR(16), "NickName" VARCHAR(50), "Email" VARCHAR(100), "Desciption" TEXT, "Servers" TEXT, "Links" TEXT, "Rank" TINYINT DEFAULT `guest`, "Added" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY("DiscordId"));');
 });
 
 const crypto = require('crypto');
@@ -199,9 +199,7 @@ const logout = (req, res) => {
 const loginDatabase = (discordId,username) => {
 	var rank = "guest";
 	console.log(typeof discordId)
-	db.get("SELECT DiscordId,Rank FROM accounts WHERE DiscordId = ?;",
-	[discordId],
-	(err, row) => {
+	db.get("SELECT DiscordId,Rank FROM accounts WHERE DiscordId = ?;",[discordId],(err, row) => {
 		if (row == undefined) { // If user does not exist
 			db.run("insert into accounts(DiscordId,Username) values (?,?)", [discordId,username], (err) => {
 				if (err) {console.error(err.message);}
@@ -219,7 +217,7 @@ const requirePermission = (rankRequired) => (req, res, next) => { //(rankRequire
 	if (!req.isAuthenticated()) {
 		res.status(403).send('Not authenticated');
 	} else {
-		if (typeof req.user !== "undefined") {
+		if (req.user !== undefined) {
 			if (rankList.indexOf(req.user.rank) >= rankList.indexOf(rankRequired)) {
 				console.log("requirePermission PASSED!");
 				next();
@@ -233,40 +231,33 @@ const requirePermission = (rankRequired) => (req, res, next) => { //(rankRequire
 	}
 }
 
-// E.x. modifyPermissions(discordId,rankList[0]) || modifyPermissions(discordId,"mod")
 const modifyPermissions = (req, res) =>{
 	const reqBody = utils.cast('object', req.body);
-	console.log(reqBody.discordId);
-	console.log(reqBody.discordId.toString());
 	const discordId = utils.cast('string', reqBody.discordId);
-	console.log(discordId);
 	const rank = utils.cast('string', reqBody.rank);
-	// make sure the new rank is one of the ranks
-	// if (!rankList.includes(rank)) {
-	// 	res.status(403).send("NOT A RANK")
-	// 	return;
-	// }
-	// // make sure that the length of the discord id is 18
-	// else if (!(discordId.toString().length === 18)){
-	// 	res.status(403).send("DISCORD ID IS NOT 18 CHARS")
-	// 	return;
-	// }
-	db.run("UPDATE accounts set Rank = ? WHERE DiscordId = ?", [rank, BigInt(discordId)], (err) => {
+	if (!rankList.includes(rank)) {
+		res.status(403).send("NOT A RANK")
+		return;
+	} else if (discordId.length > 20) {
+		res.status(403).send("DISCORD ID IS TOO LARGE")
+		return;
+	}
+	db.run("UPDATE accounts set Rank = ? WHERE DiscordId = ?", [rank, discordId], (err) => {
 		if (err) { console.error(err.message);}
 		console.log("Changed Rank for discordId: "+discordId+" to "+rank);
-		getUser(discordId);
 		res.status(200).send("Changed Rank for discordId: "+discordId+" to "+rank);
+		getUser(discordId);
 	});
 }
 
 // Will return all information on a single user in the database.
 const getUser = (discordId) => {
-	db.get("SELECT * FROM accounts WHERE DiscordId = ?;",[discordId],(err, row) => {
+	db.get("SELECT * FROM accounts WHERE DiscordId = ?",[discordId],(err, row) => {
 		if (row == undefined) { // No users exist, excuse me... WHAT?
 			console.error("That user could not be found");
 			return null;
 		} else { // If user exists, just assign
-			console.error(JSON.parse(JSON.stringify(row)));
+			console.log(JSON.parse(JSON.stringify(row)));
 		}
 	});
 }
@@ -274,26 +265,15 @@ const getUser = (discordId) => {
 
 // If no rank is specified it will return a list of all users. Otherwise it will return a list of all users with that rank
 // Returns a JSON list of users, each user has a DiscordId, Username, and Rank. For more info about a user, do getUser(discordId)
-const getUsers = (rank) => (req, res) => {
-	if (rank == null) {
-		db.all("SELECT DiscordId,Username,Rank FROM accounts;",[],(err, rows) => {
-			if (rows ==undefined) { // No users exist, excuse me... WHAT?
-				console.error("No users in database?");
-				return null;
-			} else { // If user exists, just assign
-				res.send(JSON.parse(JSON.stringify(rows)));
-			}
-		});
-	} else {
-		db.all("SELECT DiscordId,Username,Rank FROM accounts WHERE Rank = ?;",[rank],(err, rows) => {
-			if (rows == undefined) { // No users exist, excuse me... WHAT?
-				res.send("No users in database with that rank?");
-				return null;
-			} else { // If user exists, just assign
-				res.send(JSON.parse(JSON.stringify(rows)));
-			}
-		});
-	}
+const getUsers = (req, res) => {
+	db.all("SELECT DiscordId,Username,Rank FROM accounts ORDER BY Rank,DiscordId",[],(err,rows) => {
+		if (rows == undefined) { // No users exist, excuse me... WHAT?
+			res.send("No users in database with that rank?");
+			return null;
+		} else { // If user exists, just assign
+			res.send(JSON.parse(JSON.stringify(rows)));
+		}
+	});
 }
 
 
@@ -312,7 +292,7 @@ app.get(urlPrefix + 'archive/:fileName', archive.download);
 app.get(urlPrefix + 'archive', archive.index);
 app.post(urlPrefix + '__archive-upload__', archive.uploadProcess);
 
-app.get(urlPrefix + '__getalluserperms__', requirePermission('guest' ),getUsers());
+app.get(urlPrefix + '__getalluserperms__', requirePermission('guest' ),getUsers);
 app.post(urlPrefix + '__modifyuserperms__', modifyPermissions);
 
 app.get(urlPrefix + 'auth', (req, res, next) => {
