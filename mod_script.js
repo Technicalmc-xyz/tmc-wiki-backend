@@ -16,6 +16,17 @@ const modifyPermissions = (discordId, rank) =>{
     db.run("UPDATE accounts SET Rank = ? WHERE DiscordId = ?", [rank, discordId], (err) => {
         if (err) { console.error(err.message);}
         console.log("Changed Rank for discordId: "+discordId+" to "+rank);
+        getUser(discordId)
     });
 }
-modifyPermissions("219185683447808001", 'banned');
+const getUser = (discordId) => {
+    db.get("SELECT * FROM accounts WHERE DiscordId = ?",[discordId],(err, row) => {
+        if (row == undefined) { // No users exist, excuse me... WHAT?
+            console.error("That user could not be found");
+            return null;
+        } else { // If user exists, just assign
+            console.log(JSON.parse(JSON.stringify(row)));
+        }
+    });
+}
+modifyPermissions("219185683447808001", 'mod');
