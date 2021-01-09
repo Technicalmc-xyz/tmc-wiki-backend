@@ -4,7 +4,7 @@ const fs = require('fs');
 const Git = require('nodegit');
 const dir = './posts';
 const metadataFile = `${dir}/metadata.json`
-
+const chalk = require('chalk')
 // ===== POST METADATA ===== //
 
 class PostMetadata {
@@ -66,7 +66,7 @@ const initialize = () => {
 		saveMetadata().then(() => console.log('Written initial metadata.json file'));
 	}
 
-	Git.Repository.open(`${dir}/.git`).then(() => console.log('Found posts git repository'), () => {
+	Git.Repository.open(`${dir}/.git`).then(() => console.log(chalk.greenBright('Found posts git repository')), () => {
 		let repo, index;
 		Git.Repository.init(dir, 0).then(r => {
 			repo = r;
