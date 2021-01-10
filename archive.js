@@ -52,7 +52,7 @@ const uploadProcess = async (req, res) => {
     const fileExt = (fileName.split('.').pop());
     const filePrefix = fileName.split('.').slice(0, -1).join('.');
 
-    if (!fileName.contains('.') || fileName === '.nodelete' || (fileExt !== 'litematic' && fileExt !== 'schematic' && fileExt !== 'nbt')) {
+    if (!fileName.includes('.') || fileName === '.nodelete' || (fileExt !== 'litematic' && fileExt !== 'schematic' && fileExt !== 'nbt')) {
         res.redirect('/');
         return;
     }
