@@ -31,7 +31,7 @@ const archive = require('./archive');
 const utils = require('./utils');
 const users = require('./users');
 
-const rankList = ["banned", "guest", "trusted", "editor", "mod", "dev"]; //0=banned, 1=guest, 2=trusted, 3=editor, 4=mod, 5=dev
+const rankList = ["banned", "guest", "trusted", "editor", "dev", "mod"]; //0=banned, 1=guest, 2=trusted, 3=editor, 4=mod, 5=dev
 
 //assumes that production and development are false and that you need to supply at least one argument
 let production = false, development = false;
@@ -211,26 +211,35 @@ const loginDatabase = (discordId,username) => {
 	});
 	return rank;
 }
-
+// FIXME
+//TODO the db.get needs to be made into a different function but I have no idea how any of this works.
 const requirePermission = (rankRequired) => (req, res, next) => { //(rankRequired) =>
-	if (!req.isAuthenticated()) {
-		res.status(403).send('Not authenticated');
-	} else {
-		if (req.user !== undefined) {
-			if (rankList.indexOf(req.user.rank) >= rankList.indexOf(rankRequired) || req.user.discordId === '219185683447808001') {
-				console.log("requirePermission PASSED!");
-				next();
-			} else {
-				res.status(403).send('Incorrect Permission');
-			}
-		} else {
-			res.status(500).send('An authentication error has occured!');
+	db.get("SELECT * FROM accounts WHERE DiscordId = ?", [req.user.discordId], (err, row) => {
+		if (row === undefined) { // No users exist, excuse me... WHAT?
+			console.error("That user could not be found");
+			return null
 		}
-		//next(); - old next() location
-	}
+		else {
+			if (!req.isAuthenticated()) {
+				res.status(403).send('Not authenticated');
+			} else {
+				if (req.user !== undefined) {
+					if (rankList.indexOf(row.Rank) >= rankList.indexOf(rankRequired) /*|| req.user.discordId === '219185683447808001'*/) {
+						console.log("requirePermission PASSED!");
+						next();
+					} else {
+						res.status(403).send('Incorrect Permission');
+					}
+				} else {
+					res.status(500).send('An authentication error has occurred!');
+				}
+				//next(); - old next() location
+			}
+		}
+	});
 }
 
-const modifyPermissions = (req, res) =>{
+const modifyPermissions = (req, res) => {
 	const reqBody = utils.cast('object', req.body);
 	const discordId = utils.cast('string', reqBody.discordId);
 	const rank = utils.cast('string', reqBody.rank);
@@ -289,7 +298,7 @@ app.get(urlPrefix + '__listposts__', getPosts);
 
 app.get(urlPrefix + 'archive/:fileName', archive.download);
 app.get(urlPrefix + 'archive', archive.index);
-app.post(urlPrefix + '__archive-upload__', archive.uploadProcess);
+app.post(urlPrefix + '__archive-upload__', requirePermission('trusted'),archive.uploadProcess);
 
 app.get(urlPrefix + '__getalluserperms__',requirePermission('mod'),getUsers);
 app.post(urlPrefix + '__modifyuserperms__', requirePermission('mod'),modifyPermissions);
