@@ -214,6 +214,9 @@ const loginDatabase = (discordId,username) => {
 // FIXME
 //TODO the db.get needs to be made into a different function but I have no idea how any of this works.
 const requirePermission = (rankRequired) => (req, res, next) => { //(rankRequired) =>
+	if (req.user === undefined) {
+        return res.status(403).send('Incorrect Permission');
+    }
 	db.get("SELECT * FROM accounts WHERE DiscordId = ?", [req.user.discordId], (err, row) => {
 		if (row === undefined) { // No users exist, excuse me... WHAT?
 			console.error("That user could not be found");
