@@ -217,8 +217,15 @@ const requirePermission = (rankRequired) => (req, res, next) => { //(rankRequire
 		res.status(403).send('Not authenticated');
 	} else {
 		if (req.user !== undefined) {
-			if (rankList.indexOf(req.user.rank) >= rankList.indexOf(rankRequired) || req.user.discordId === '219185683447808001') {
-				console.log("requirePermission PASSED!");
+			if (new Promise((rs, rj) => {
+				db.get("SELECT * FROM accounts WHERE DiscordId = ?", [req.user.discordId], (err, row) => {
+    					if (row === undefined) {
+						return false;
+					} else {
+						return true;
+					}
+ 				}
+			})) {
 				next();
 			} else {
 				res.status(403).send('Incorrect Permission');
