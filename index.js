@@ -2,15 +2,15 @@
 TODO: read all posts backwards in order to show the NEWEST posts FIRST
  */
 // Setting up the authentication library
- var sqlite3 = require("sqlite3");
- let db = new sqlite3.Database("Authentication.db", sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, err => {
- 	if (err) { console.error(err.message); }
- 	console.log(chalk.greenBright("Connected to the authentication database."));
- });
+var sqlite3 = require("sqlite3");
+let db = new sqlite3.Database("Authentication.db", sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, err => {
+	if (err) { console.error(err.message); }
+	console.log(chalk.greenBright("Connected to the authentication database."));
+});
 
 // Creating the table for the first time, also shows the table structure. Lots of info incase you want to add stuff in the future (forward thinking)
- db.serialize(() => {
- 	db.run('CREATE TABLE IF NOT EXISTS "accounts" ("DiscordId" VARCHAR(20) NOT NULL UNIQUE, "Username" VARCHAR(50) NOT NULL, "McUsername" VARCHAR(16), "NickName" VARCHAR(50), "Email" VARCHAR(100), "Desciption" TEXT, "Servers" TEXT, "Links" TEXT, "Rank" TINYINT DEFAULT `guest`, "Added" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY("DiscordId"));');
+db.serialize(() => {
+	db.run('CREATE TABLE IF NOT EXISTS "accounts" ("id" VARCHAR(20) NOT NULL UNIQUE, "username" VARCHAR(50) NOT NULL, "discriminator" SMALLINT NOT NULL, "avatar" VARCHAR NOT NULL,"mcusername" VARCHAR(16), "Links" TEXT, "rank" TINYINT DEFAULT `guest`, "Added" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY("id"));');
 });
 
 const crypto = require('crypto');
@@ -29,7 +29,6 @@ const fileUpload = require('express-fileupload');
 const posts = require('./posts');
 const archive = require('./archive');
 const utils = require('./utils');
-const users = require('./users');
 
 const rankList = ["banned", "guest", "trusted", "editor", "dev", "mod"]; //0=banned, 1=guest, 2=trusted, 3=editor, 4=mod, 5=dev
 
@@ -39,7 +38,7 @@ if (process.argv.length === 2) {
 	console.error('Expected at least one argument!');
 	process.exit(1);
 }
-//gets the third argument and makes either production or developent true
+//gets the third argument and makes either production or development true
 const arguments = process.argv.slice(2);
 if (arguments[0] === 'pro'){
 	production = true;
@@ -56,16 +55,19 @@ const secretConfig = JSON.parse(fs.readFileSync('secret_config.json', 'utf8'));
 
 const app = express();
 passport.serializeUser((user, callback) => {
-	callback(null, user.discordId);
+	callback(null, user);
 });
 passport.deserializeUser((discordId, callback) => {
-	const user = users.User.findById(discordId);
-	if (user) {
-		callback(null, user);
-	} else {
-		callback(new Error(`User with id ${discordId} not found`));
-	}
+	userExists(discordId).then((result) => {
+		if (result){
+			callback(null, discordId)
+		}
+		else {
+			callback(null, new Error(`User with id ${discordId} not found`));
+		}
+	})
 });
+
 passport.use('discord', new DiscordStrategy({
 	clientID: '773179848587608095',
 	clientSecret: secretConfig.discord_client_secret,
@@ -73,12 +75,10 @@ passport.use('discord', new DiscordStrategy({
 	scope: ['identify'],
 	customHeaders: []
 }, (accessToken, refreshToken, profile, callback) => {
-	loginDatabase(profile.id,profile.username, (result) => {
-		return callback(null, new users.User(profile.id, profile.username, profile.discriminator, `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png?size=32`, result)); // Added Guest argument to user info
-	});
-
-
+	loginDatabase(profile.id,profile.username, profile.discriminator, profile.avatar)
+	return callback(null, profile.id)
 }));
+
 app.use(session({
 	secret: crypto.randomBytes(512).toString('base64'),
 	saveUninitialized: true,
@@ -87,6 +87,7 @@ app.use(session({
 		secure: false // FIXME
 	}
 }));
+
 app.use(passport.initialize());
 app.use(passport.session());
 app.use(bodyParser.urlencoded({extended : true}));
@@ -183,79 +184,89 @@ const getPosts = async (req, res) => {
 	res.send(myPosts);
 }
 
-const getUserInfo = (req, res) => {
-	const result = {};
-	if (req.isAuthenticated()) {
-		Object.assign(result, req.user);
-		result.authenticated = true;
-	} else {
-		result.authenticated = false;
-	}
-	res.send(result);
-}
 
+const getUserInfo = (req, res) => {
+	let userInfo = {};
+	if (req.isAuthenticated()) {
+		getUser(req.user, (result)=>{
+			Object.assign(userInfo, result);
+			console.log(JSON.stringify(result));
+			console.log(JSON.stringify(userInfo));
+			res.send(userInfo);
+		});
+		userInfo.authenticated = true;
+	} else {
+		userInfo.authenticated = false;
+		res.send(userInfo);
+	}
+
+
+}
 const logout = (req, res) => {
 	req.logout();
 	res.redirect('/');
 }
 
-const loginDatabase = (discordId,username, callback) => {
-	db.get("SELECT DiscordId,Rank FROM accounts WHERE DiscordId = ?;",[discordId],(err, row) => {
+const loginDatabase = (id,username,discriminator, avatar) => {
+	db.get("SELECT id,rank FROM accounts WHERE id = ?;",[id],(err, row) => {
 		if (row === undefined) { // If user does not exist
-			db.run("insert into accounts(DiscordId,Username) values (?,?)", [discordId,username], (err) => {
+			db.run("insert into accounts(id,username,discriminator,avatar) values (?,?,?,?)", [id, username, discriminator, avatar], (err) => {
 				if (err) {console.error(err.message);}
-				console.log("DiscordId: "+discordId+" - Username: " + username + " was added to the login database!");
+				console.log("id: "+id+" - Username: " + username + " was added to the login database!");
 				// Rank would be "guest" so do nothing
 			});
-		} else { // If user exists, just assign
-			return callback(row.Rank)
+		} else { // If user exists, overwrite the database with the their information, in case they updated their profile
+			db.run("UPDATE accounts set username = ?, discriminator =?, avatar = ? WHERE id = ?", [id,username,discriminator,avatar], (err) => {
+				if (err) {console.error(err.message);}
+				console.log("id: "+id+" - Username: " + username + " has logged back in");
+				// Rank would be "guest" so do nothing
+			});
 		}
 	});
 }
 
 
 const requirePermission = (rankRequired) => (req, res, next) => {
-    if (req.user === undefined) {
-        return res.status(403).send('Incorrect Permission');
-    } else if (!req.isAuthenticated()) {
-        res.status(403).send('Not authenticated');
-    } else getUser(req.user.discordId, (result) => {
-        if (rankList.indexOf(result.Rank) >= rankList.indexOf(rankRequired)) {
-            next()
-        } else {
-            res.status(403).send('Incorrect Permission');
-        }
-    })
+	if (req.user === undefined) {
+		return res.status(403).send('Incorrect Permission');
+	} else if (!req.isAuthenticated()) {
+		res.status(403).send('Not authenticated');
+	} else getUser(req.user.id, (result) => {
+		if (rankList.indexOf(result.rank) >= rankList.indexOf(rankRequired)) {
+			next()
+		} else {
+			res.status(403).send('Incorrect Permission');
+		}
+	})
 }
 
 
 const modifyPermissions = (req, res) => {
 	const reqBody = utils.cast('object', req.body);
-	const discordId = utils.cast('string', reqBody.discordId);
+	const id = utils.cast('string', reqBody.discordId);
 	const rank = utils.cast('string', reqBody.rank);
 	if (!rankList.includes(rank)) {
 		res.status(403).send("NOT A RANK")
 		return;
-	} else if (discordId.length > 20) {
+	} else if (id.length > 20) {
 		res.status(403).send("DISCORD ID IS TOO LARGE")
 		return;
 
 	}
-	db.run("UPDATE accounts set Rank = ? WHERE DiscordId = ?", [rank, discordId], (err) => {
+	db.run("UPDATE accounts set rank = ? WHERE id = ?", [rank, id], (err) => {
 		if (err) { console.error(err.message);}
-		console.log((chalk.green("Changed Rank for discordId: "+discordId+" to "+rank)));
-		res.status(200).send("Changed Rank for discordId: "+discordId+" to "+rank);
+		console.log((chalk.green("Changed Rank for id: "+id+" to "+rank)));
+		res.status(200).send("Changed Rank for id: "+id+" to "+rank);
 	});
 }
 
 // Will return all information on a single user in the database.
-const getUser = (discordId, callback) => {
-	db.get("SELECT * FROM accounts WHERE DiscordId = ?",[discordId],(err, row) => {
+const getUser = (id, callback) => {
+	db.get("SELECT * FROM accounts WHERE id = ?",[id],(err, row) => {
 		if (row === undefined) { // No users exist
 			return callback(null);
 		} else { // If user exists, just assign
-			console.log(row.Rank);
-		    return callback(JSON.parse(JSON.stringify(row)));
+			return callback(JSON.parse(JSON.stringify(row)));
 		}
 	});
 }
@@ -264,16 +275,19 @@ const getUser = (discordId, callback) => {
 // If no rank is specified it will return a list of all users. Otherwise it will return a list of all users with that rank
 // Returns a JSON list of users, each user has a DiscordId, Username, and Rank. For more info about a user, do getUser(discordId)
 const getUsers = (req, res) => {
-	db.all("SELECT DiscordId,Username,Rank FROM accounts ORDER BY Rank,DiscordId",[],(err,rows) => {
-		if (rows == undefined) { // No users exist, excuse me... WHAT?
+	db.all("SELECT id,username,rank FROM accounts ORDER BY rank,id",[],(err,rows) => {
+		if (rows === undefined) { // No users exist, excuse me... WHAT?
 			res.send("No users in database with that rank?");
-			return null;
 		} else { // If user exists, just assign
 			res.send(JSON.parse(JSON.stringify(rows)));
 		}
 	});
 }
-
+const userExists = async (id) => {
+	await db.get("SELECT * FROM accounts WHERE id = ?",[id],(err, row) => {
+		return row !== undefined;
+	});
+}
 
 const urlPrefix = production ? "/" : "/api/"
 
