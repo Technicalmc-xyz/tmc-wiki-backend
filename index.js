@@ -73,8 +73,11 @@ passport.use('discord', new DiscordStrategy({
 	scope: ['identify'],
 	customHeaders: []
 }, (accessToken, refreshToken, profile, callback) => {
-	var rank = loginDatabase(profile.id,profile.username);
-	return callback(null, new users.User(profile.id, profile.username, profile.discriminator, `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png?size=32`, rank)); // Added Guest argument to user info
+	loginDatabase(profile.id,profile.username, (result) => {
+		return callback(null, new users.User(profile.id, profile.username, profile.discriminator, `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png?size=32`, result)); // Added Guest argument to user info
+	});
+
+
 }));
 app.use(session({
 	secret: crypto.randomBytes(512).toString('base64'),
@@ -114,6 +117,7 @@ const getPost = async (req, res) => {
 	console.log("Post ID Number: " + postId)
 	res.send(networkPost);
 }
+
 const getPost_ = async (req, res) => {
 	const reqBody = utils.cast('object', req.body);
 	const postId = utils.cast('number', +reqBody.id);
@@ -195,49 +199,35 @@ const logout = (req, res) => {
 	res.redirect('/');
 }
 
-// Adds user to database if they weren't already in the database. Done after discord authentication!
-const loginDatabase = (discordId,username) => {
-	var rank = "guest";
+const loginDatabase = (discordId,username, callback) => {
 	db.get("SELECT DiscordId,Rank FROM accounts WHERE DiscordId = ?;",[discordId],(err, row) => {
-		if (row == undefined) { // If user does not exist
+		if (row === undefined) { // If user does not exist
 			db.run("insert into accounts(DiscordId,Username) values (?,?)", [discordId,username], (err) => {
 				if (err) {console.error(err.message);}
 				console.log("DiscordId: "+discordId+" - Username: " + username + " was added to the login database!");
 				// Rank would be "guest" so do nothing
 			});
 		} else { // If user exists, just assign
-			rank = (row.Rank || "guest");
-		}
-	});
-	return rank;
-}
-// FIXME
-//TODO the db.get needs to be made into a different function but I have no idea how any of this works.
-const requirePermission = (rankRequired) => (req, res, next) => { //(rankRequired) =>
-	db.get("SELECT * FROM accounts WHERE DiscordId = ?", [req.user.discordId], (err, row) => {
-		if (row === undefined) { // No users exist, excuse me... WHAT?
-			console.error("That user could not be found");
-			return null
-		}
-		else {
-			if (!req.isAuthenticated()) {
-				res.status(403).send('Not authenticated');
-			} else {
-				if (req.user !== undefined) {
-					if (rankList.indexOf(row.Rank) >= rankList.indexOf(rankRequired) || req.user.discordId === '219185683447808001') {
-						console.log("requirePermission PASSED!");
-						next();
-					} else {
-						res.status(403).send('Incorrect Permission');
-					}
-				} else {
-					res.status(500).send('An authentication error has occurred!');
-				}
-				//next(); - old next() location
-			}
+			return callback(row.Rank)
 		}
 	});
 }
+
+
+const requirePermission = (rankRequired) => (req, res, next) => {
+    if (req.user === undefined) {
+        return res.status(403).send('Incorrect Permission');
+    } else if (!req.isAuthenticated()) {
+        res.status(403).send('Not authenticated');
+    } else getUser(req.user.discordId, (result) => {
+        if (rankList.indexOf(result.Rank) >= rankList.indexOf(rankRequired)) {
+            next()
+        } else {
+            res.status(403).send('Incorrect Permission');
+        }
+    })
+}
+
 
 const modifyPermissions = (req, res) => {
 	const reqBody = utils.cast('object', req.body);
@@ -259,13 +249,13 @@ const modifyPermissions = (req, res) => {
 }
 
 // Will return all information on a single user in the database.
-const getUser = (discordId) => {
+const getUser = (discordId, callback) => {
 	db.get("SELECT * FROM accounts WHERE DiscordId = ?",[discordId],(err, row) => {
-		if (row == undefined) { // No users exist, excuse me... WHAT?
-			console.error("That user could not be found");
-			return null;
+		if (row === undefined) { // No users exist
+			return callback(null);
 		} else { // If user exists, just assign
-			console.log(JSON.parse(JSON.stringify(row)));
+			console.log(row.Rank);
+		    return callback(JSON.parse(JSON.stringify(row)));
 		}
 	});
 }
