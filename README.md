@@ -1,4 +1,7 @@
 # Wiki backend
-For development `nodemon index.js dev`
+For development `nodemon index.ts dev`
 
-For produciton `nodemon index.js pro`
+Eslint run with fix `npm pretest -- --fix`
+
+For produciton `nodemon index.ts pro`
+

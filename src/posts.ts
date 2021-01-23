@@ -1,13 +1,19 @@
 // Post parser
-
-const fs = require('fs');
+export {};
+const {existsSync, promises, readFileSync, writeFile} = require('fs');
 const Git = require('nodegit');
 const dir = './posts';
 const metadataFile = `${dir}/metadata.json`
-const chalk = require('chalk')
-// ===== POST METADATA ===== //
+const {greenBright} = require('chalk')
 
+// ===== POST METADATA ===== //
 class PostMetadata {
+	id: number;
+	title: string;
+	tags: string;
+	description: string;
+	last_edited: number;
+	edit_count: number
 	constructor() {
 		this.id = 0;
 		this.title = '';
@@ -23,11 +29,11 @@ let nextPostId = 0;
 const initialize = () => {
 	let metadata;
 	let needsToSave = false;
-	if (fs.existsSync(metadataFile)) {
-		metadata = JSON.parse(fs.readFileSync(metadataFile, 'utf8'));
+	if (existsSync(metadataFile)) {
+		metadata = JSON.parse(readFileSync(metadataFile, 'utf8'));
 	} else {
-		if (fs.existsSync('metadata.json')) {
-			metadata = JSON.parse(fs.readFileSync('metadata.json', 'utf8'));
+		if (existsSync('metadata.json')) {
+			metadata = JSON.parse(readFileSync('metadata.json', 'utf8'));
 		} else {
 			metadata = null;
 		}
@@ -66,7 +72,7 @@ const initialize = () => {
 		saveMetadata().then(() => console.log('Written initial metadata.json file'));
 	}
 
-	Git.Repository.open(`${dir}/.git`).then(() => console.log(chalk.greenBright('Found posts git repository')), () => {
+	Git.Repository.open(`${dir}/.git`).then(() => console.log(greenBright('Found posts git repository')), () => {
 		let repo, index;
 		Git.Repository.init(dir, 0).then(r => {
 			repo = r;
@@ -90,7 +96,7 @@ const initialize = () => {
 };
 
 const saveMetadata = async () => {
-	await fs.writeFile(metadataFile, JSON.stringify({
+	await writeFile(metadataFile, JSON.stringify({
 		nextPostId: nextPostId,
 		posts: Array.from(postMetadata.values())
 	}, null, 2), (err) => {
@@ -118,7 +124,7 @@ exports.getMetadata = getMetadata;
 const postBodyCacheLimit = 100;
 const postBodyCache = new Map();
 
-const getPostBody = async (postId) => {
+const getPostBody = async (postId: number) => {
 	if (postBodyCache.has(postId)) {
 		// Move this post ID to the end of the cache
 		const body = postBodyCache.get(postId);
@@ -131,7 +137,7 @@ const getPostBody = async (postId) => {
 		postBodyCache.delete(postBodyCache.keys().next().value);
 	}
 
-	const beautified = await fs.promises.readFile(`${dir}/${postId}.json`, 'utf8');
+	const beautified = await promises.readFile(`${dir}/${postId}.json`, 'utf8');
 	const body = JSON.stringify(JSON.parse(beautified));
 
 	postBodyCache.set(postId, body);
@@ -139,7 +145,7 @@ const getPostBody = async (postId) => {
 };
 exports.getPostBody = getPostBody;
 
-const setPostBody = async (postId, newBody) => {
+const setPostBody = async (postId: number, newBody) => {
 	if (!postBodyCache.has(postId)) {
 		while (postBodyCache.size >= postBodyCacheLimit) {
 			postBodyCache.delete(postBodyCache.keys().next().value);
@@ -149,7 +155,7 @@ const setPostBody = async (postId, newBody) => {
 	const beautified = JSON.stringify(JSON.parse(newBody), null, 2);
 
 	postBodyCache.set(postId, newBody);
-	await fs.writeFile(`${dir}/${postId}.json`, beautified, {encoding: 'utf8'}, (err) => {
+	await writeFile(`${dir}/${postId}.json`, beautified, {encoding: 'utf8'}, (err) => {
 		if (err) {
 			console.log(err);
 		} else {
@@ -191,7 +197,7 @@ exports.commit = commit;
 
 // ===== OTHER ===== //
 
-const createPost = async (author, title, description, tags, body) => {
+const createPost = async (author: string, title: string, description: string, tags: string, body: any) => {
 	const postId = nextPostId++;
 	// save post body before metadata to avoid race condition
 	await setPostBody(postId, body);
@@ -207,7 +213,7 @@ const createPost = async (author, title, description, tags, body) => {
 }
 exports.createPost = createPost;
 
-const getNetworkPostObject = async (postId) => {
+const getNetworkPostObject = async (postId: number) => {
 	const metadata = getMetadata(postId);
 	return {
 		id: postId,
@@ -220,5 +226,4 @@ const getNetworkPostObject = async (postId) => {
 	};
 }
 exports.getNetworkPostObject = getNetworkPostObject;
-
 initialize();

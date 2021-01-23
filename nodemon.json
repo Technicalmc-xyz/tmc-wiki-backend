@@ -1,0 +1,11 @@
+{
+  "ext": "ts",
+  "ignore": [
+    "*.test.ts",
+    ".json",
+    ".db"
+  ],
+  "execMap": {
+    "ts": "ts-node"
+  }
+}

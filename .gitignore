@@ -133,4 +133,4 @@ archive/*
 !archive/.nodelete
 
 # Secrets
-secret_config.json
+configs/secret_config.json
