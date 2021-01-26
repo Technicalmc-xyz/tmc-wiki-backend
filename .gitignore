@@ -125,7 +125,7 @@ posts/
 metadata.json
 /app.js
 /data
-
+*.db
 /.idea
 
 # archive data
