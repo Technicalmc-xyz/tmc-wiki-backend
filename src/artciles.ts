@@ -36,11 +36,12 @@ class PostMetadata {
     }
 }
 
-const postMetadata = new Map();
+const postMetadata: Map<number, PostMetadata> = new Map();
+
 let nextPostId = 0;
-const initialize = () => {
+const initialize = (): void => {
     let metadata;
-    let needsToSave = false;
+    let needsToSave:boolean = false;
     if (existsSync(metadataFile)) {
         metadata = JSON.parse(readFileSync(metadataFile, 'utf8'));
     } else {
@@ -107,7 +108,7 @@ const initialize = () => {
     });
 };
 
-const saveMetadata = async () => {
+const saveMetadata = async (): Promise<void> => {
     await writeFile(metadataFile, JSON.stringify({
         nextPostId: nextPostId,
         posts: Array.from(postMetadata.values())
@@ -120,17 +121,17 @@ const saveMetadata = async () => {
     });
 }
 
-export const getAllMetadata = () => Array.from(postMetadata.values());
+export const getAllMetadata = (): PostMetadata[] => Array.from(postMetadata.values());
 
-export const postExists = (postId) => postMetadata.has(postId);
+export const postExists = (postId: number):boolean => postMetadata.has(postId);
 
-export const getMetadata = (postId) => postMetadata.get(postId);
+export const getMetadata = (postId: number): PostMetadata => postMetadata.get(postId);
 
 
 // ===== POST BODY ===== //
 
-const postBodyCacheLimit = 100;
-const postBodyCache = new Map();
+const postBodyCacheLimit:number = 100;
+const postBodyCache: Map<number, string> = new Map();
 
 const getPostBody = async (postId: number) => {
     if (postBodyCache.has(postId)) {
@@ -146,21 +147,21 @@ const getPostBody = async (postId: number) => {
     }
 
     const beautified = await promises.readFile(`${dir}/${postId}.json`, 'utf8');
-    const body = JSON.stringify(JSON.parse(beautified));
+    const body: string = JSON.stringify(JSON.parse(beautified));
 
     postBodyCache.set(postId, body);
     return body;
 };
 
 
-const setPostBody = async (postId: number, newBody) => {
+const setPostBody = async (postId: number, newBody: string) => {
     if (!postBodyCache.has(postId)) {
         while (postBodyCache.size >= postBodyCacheLimit) {
             postBodyCache.delete(postBodyCache.keys().next().value);
         }
     }
 
-    const beautified = JSON.stringify(JSON.parse(newBody), null, 2);
+    const beautified: string = JSON.stringify(JSON.parse(newBody), null, 2);
 
     postBodyCache.set(postId, newBody);
     await writeFile(`${dir}/${postId}.json`, beautified, {encoding: 'utf8'}, (err) => {
@@ -200,7 +201,6 @@ const commit = async (postId, message, author, email = `${author}@technicalmc.xy
     console.log(`Committed change ${commitId} to file ${postId}.json`);
 }
 
-
 const createMetadataDB = async (metadata: PostMetadata): Promise<void | null> =>
     await db.get('SELECT title FROM articles WHERE id = ?;', [metadata.id], (err, row) => {
         if (row == undefined) { // If user does not exist
@@ -231,7 +231,6 @@ export const createPost = async (author: string, title: string, description: str
     await commit(postId, `Create ${title}`, author);
     return metadata;
 }
-
 
 export const getNetworkPostObject = async (postId: number) => {
     const metadata = getMetadata(postId);
