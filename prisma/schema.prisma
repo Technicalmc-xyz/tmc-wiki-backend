@@ -1,0 +1,28 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+datasource articles {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Article {
+  id        Int     @unique @default(autoincrement())
+  title     String
+  tag       String
+  description       String
+  last_edited       Int
+  edit_count        Int
+}
+
+model User {
+    id            String @unique
+    username      String
+    discriminator String
+    avatar        String
+    rank          String @default("guest")
+}
