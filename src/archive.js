@@ -1,6 +1,6 @@
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P((resolve) => { resolve(value); }); }
-    return new (P || (P = Promise))((resolve, reject) => {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
         function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
         function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
         function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
@@ -41,7 +41,7 @@ var index = function (req, res) {
     var lsFiles = readdirSync('./archive/');
     var response = {};
     var id = 0;
-    lsFiles.forEach((file) => {
+    lsFiles.forEach(function (file) {
         if (file === '.nodelete') {
             return;
         }
@@ -73,7 +73,7 @@ var download = function (req, res) {
 exports.download = download;
 var uploadProcess = function (req, res) { return __awaiter(_this, void 0, void 0, function () {
     var file, fileName, fileExt, filePrefix, path, id;
-    return __generator(this, (_a) => {
+    return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
                 file = req.files.file;

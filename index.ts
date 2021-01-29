@@ -1,25 +1,11 @@
-// Setting up the authentication library
-const sqlite3 = require('sqlite3');
-
-const userdatabase = new sqlite3.Database('Authentication.db', sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE, (err) => {
-    if (err) {
-        console.error(err.message);
-    }
-    console.log(magenta('Connected to the authentication database.'));
-});
-
-// Creating the table for the first time, also shows the table structure. Lots of info in case you want to add stuff in the future (forward thinking)
-userdatabase.serialize(() => {
-    userdatabase.run('CREATE TABLE IF NOT EXISTS "accounts" ("id" VARCHAR(20) NOT NULL UNIQUE, "username" VARCHAR(50) NOT NULL, "discriminator" SMALLINT NOT NULL, "avatar" VARCHAR NOT NULL,"mcusername" VARCHAR(16), "links" TEXT, "rank" TINYINT DEFAULT `guest`, "added" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY("id"));');
-});
-
+import {PrismaClient} from "@prisma/client"
+const prisma = new PrismaClient();
 const {randomBytes} = require('crypto');
 const express = require('express');
 const compression = require('compression');
 const bodyParser = require('body-parser');
 const fs = require('fs');
 const passport = require('passport');
-const querystring = require('querystring');
 const DiscordStrategy = require('passport-discord').Strategy;
 const session = require('express-session');
 const {greenBright, magenta, red} = require('chalk')
@@ -30,7 +16,8 @@ const articles = require('./src/artciles');
 const archive = require('./src/archive');
 const utils = require('./utils/utils');
 
-const rankList= ['banned', 'guest', 'trusted', 'editor', 'dev', 'mod']; // 0=banned, 1=guest, 2=trusted, 3=editor, 4=mod, 5=dev
+const rankList = ['banned', 'guest', 'trusted', 'editor', 'dev', 'mod']; // 0=banned, 1=guest, 2=trusted, 3=editor, 4=mod, 5=dev
+
 
 // Assumes that production and development are false and that you need to supply at least one argument
 let production: boolean = false;
@@ -40,14 +27,13 @@ if (process.argv.length === 2) {
     process.exit(1);
 }
 // Gets the third argument and makes either production or development true
-const arguments = process.argv.slice(2);
-if (arguments[0] === 'pro') {
+let args: string[] = process.argv.slice(2);
+if (args[0] === 'pro') {
     production = true;
 } else {
     development = true;
 }
-console.log('arguments: ', arguments);
-
+console.log('arguments: ', args);
 
 if (!fs.existsSync('configs/secret_config.json')) {
     throw new Error('You need a secret_config.json file to store app secrets!');
@@ -76,7 +62,13 @@ passport.use('discord', new DiscordStrategy({
     scope: ['identify'],
     customHeaders: []
 }, (accessToken, refreshToken, profile, callback) => {
-    loginDatabase({id : profile.id, username : profile.username, discriminator : profile.discriminator, avatar : profile.avatar});
+    LoginDatabase({
+        id: profile.id,
+        username: profile.username,
+        discriminator: profile.discriminator,
+        avatar: profile.avatar
+    })
+        .catch((err) => console.log(red(err)));
     return callback(null, profile.id);
 }));
 
@@ -109,10 +101,7 @@ const handleCreatePost = async (req, res) => {
 };
 
 
-
-
-
-const editPost = async (req, res) => {
+const editArticle = async (req, res) => {
     const postId = utils.cast('number', +utils.cast('object', req.query).id);
     if (!articles.postExists(postId)) {
         res.status(404).send(`No such post ID ${postId}`);
@@ -129,7 +118,7 @@ const editPost = async (req, res) => {
     await articles.setPostBody(postId, utils.cast('string', reqBody.body));
     const message = utils.cast('string', reqBody.message);
     metadata.title = utils.cast('string', reqBody.title);
-    metadata.tags = utils.cast('string', reqBody.tags);
+    metadata.tag = utils.cast('string', reqBody.tags);
     metadata.description = utils.cast('string', reqBody.description);
     metadata.last_edited = new Date().toDateString();
     await articles.saveMetadata();
@@ -140,62 +129,52 @@ const editPost = async (req, res) => {
 
 const getArticle = async (req, res) => {
     const postId = utils.cast('number', +utils.cast('object', req.query).id);
+    console.log(typeof postId)
+    console.log(postId)
     if (!articles.postExists(postId)) {
         res.status(404).send(`No such post ID ${postId}`);
         return;
     }
     const networkPost = await articles.getNetworkPostObject(postId);
+    console.log(await articles.postExistsDB(postId));
+    await articles.removePostDB(postId);
     // See what post number is being requested
     // Console.log('Post ID Number: ' + postId);
     res.send(networkPost);
 };
 
 const getArticles = async (req, res) => {
-    const query = utils.cast('object', req.query);
-    let n = utils.cast('number', +query.n) || 5;
-    if (n < 0) n = 5;
-    let start = utils.cast('number', +query.start) || 0;
-    if (start < 0) start = 0;
-    const q = utils.cast('string', query.q);
-    let myPosts = articles.getAllMetadata();
+    // TODO implement this back
+    // const query = utils.cast('object', req.query);
+    // let n = utils.cast('number', +query.n) || 5;
+    // if (n < 0) n = 5;
+    // let start = utils.cast('number', +query.start) || 0;
+    // if (start < 0) start = 0;
+    // const q = utils.cast('string', query.q);
 
-    if (q) {
-        // TODO: sorting
-    } else {
-        myPosts.sort((a, b) => {
-            if (a.last_edited < b.last_edited) return -1;
-            else if (a.last_edited > b.last_edited) return 1;
-            else return 0;
-        });
-    }
-
-    const length = myPosts.length;
-    if (start > length) start = length;
-    if (start + n > length) n = length - start;
-    myPosts = myPosts.slice(length - start - n, length - start);
-    res.send(myPosts);
-};
-
-const getUserInfo = (req, res) => {
-    let userInfo = {
-        authenticated: undefined
-    };
-    if (req.isAuthenticated()) {
-        getUser({id : req.user, callback : (result) => {
-            Object.assign(userInfo, result);
-            res.send(userInfo);
-        }});
-        userInfo.authenticated = true;
-    } else {
-        userInfo.authenticated = false;
-        res.send(userInfo);
-    }
+    let myArticles = await articles.getMetadataDB();
+    console.log(myArticles)
+    // if (q) {
+    //     // TODO: sorting
+    // } else {
+    //     myPosts.sort((a, b) => {
+    //         if (a.last_edited < b.last_edited) return -1;
+    //         else if (a.last_edited > b.last_edited) return 1;
+    //         else return 0;
+    //     });
+    // }
+    //
+    // const length = myPosts.length;
+    // if (start > length) start = length;
+    // if (start + n > length) n = length - start;
+    //
+    res.send(myArticles);
 };
 
 const logout = (req, res) => {
-    getUser({id : req.user, callback : result => {
-        console.log("id: " + result.id + "; Username: " + result.username + "; Has logged out!");
-    }});
+    getUser(req.user).then(r => {
+        console.log("id: " + r.id + "; Username: " + r.username + "; Has logged out!");
+    })
     req.logout();
     res.redirect('/');
 };
@@ -204,104 +183,100 @@ const logout = (req, res) => {
 interface LoginDatabaseParams {
     id: string;
     username: string;
-    discriminator: number;
+    discriminator: string;
     avatar: string;
 }
-const loginDatabase = ({id, username, discriminator, avatar}: LoginDatabaseParams) => {
-    userdatabase.get('SELECT id FROM accounts WHERE id = ?;', [id], (err, row) => {
-        if (row == undefined) { // If user does not exist
-            userdatabase.run('insert into accounts(id,username,discriminator,avatar) values (?,?,?,?)', [id, username, discriminator, avatar], (err) => {
-                if (err) {
-                    console.error(err.message);
-                }
-                console.log('id: ' + id + ' - Username: ' + username + ' was added to the login database!');
-                // Rank would be "guest" so do nothing
-            });
-        } else { // If user exists, overwrite the database with the their information, in case they updated their profile
-            userdatabase.run('UPDATE accounts set username = ?, discriminator =?, avatar = ? WHERE id = ?', [username, discriminator, avatar, id], (err) => {
-                if (err) {
-                    console.error(err.message);
-                }
-                console.log('id: ' + id + ' - Username: ' + username + ' has logged back in');
-                // Rank would be "guest" so do nothing
-            });
-        }
-    });
-};
 
+const LoginDatabase = async ({id, username, discriminator, avatar}: LoginDatabaseParams) => {
+    const user = await prisma["user"].findUnique({where: {id: id}});
+    if (user === null) {
+        console.log(`id: ${id} - username: ${username} has signed up`)
+        return await prisma["user"].create({
+            data: {
+                id: id,
+                username: username,
+                discriminator: discriminator,
+                avatar: avatar,
+                rank: "guest"
+            }
+        })
+    } else {
+        console.log(`id: ${id} - username: ${username} has logged back in`)
+        return await prisma["user"].update({
+            where: {id: id},
+            data: {
+                username: username,
+                discriminator: discriminator,
+                avatar: avatar
+            }
+        })
+    }
+}
 
 const requirePermission = (rankRequired: string) => (req, res, next) => {
     if (!req.isAuthenticated()) {
         console.log("THIS USER IS NOT AUTH'D");
         return res.status(403).send('Not authenticated');
     } else {
-        getUser({id : req.user, callback : result => {
-            if (rankList.indexOf(result.rank) >= rankList.indexOf(rankRequired)) {
+        getUser(req.user).then(r => {
+            if (rankList.indexOf(r.rank) >= rankList.indexOf(rankRequired)) {
                 next();
             } else {
                 return res.status(403).send('Incorrect Permission Level');
             }
-        }});
+        })
     }
 };
 
 
-const modifyPermissions = (req, res) => {
+const modifyPermissions = async (req, res) => {
     const reqBody = utils.cast('object', req.body);
     const id = utils.cast('string', reqBody.discordId);
     const rank = utils.cast('string', reqBody.rank);
     if (!rankList.includes(rank)) {
         return res.status(403).send('NOT A RANK');
 
-    }
-    else if (id.length > 20) {
+    } else if (id.length > 20) {
         return res.status(403).send('DISCORD ID IS TOO LARGE');
+    } else {
+        await prisma.user.update({
+            where: {id: id},
+            data: {rank: rank}
+        })
+            .then(() => {
+                console.log(greenBright('Changed Rank for id: ' + id + ' to ' + rank));
+                return res.status(200).send('Changed Rank for id: ' + id + ' to ' + rank);
+            })
+            .catch((err) => console.log(red(err)))
     }
-    else {
-        userdatabase.run('UPDATE accounts set rank = ? WHERE id = ?', [rank, id], (err) => {
-            if (err) {
-                return res.status(403).send(err);
-            }
-            console.log(greenBright('Changed Rank for id: ' + id + ' to ' + rank));
-            return res.status(200).send('Changed Rank for id: ' + id + ' to ' + rank);
-        });
-    }
-
 };
 
-
-interface User {
-    id: string;
-    callback: any;
-}
-// Will return all information on a single user in the database.
-const getUser = ({id, callback}: User) => {
-    userdatabase.get("SELECT * FROM accounts WHERE id = ?", [id], (err, row) => {
-        if (row == undefined) { // No users exist
-            return callback(null);
-        }  // If user exists, just assign
-        else {
-            return callback(row);
-        }
-    });
+//FIXME running multiple times on load of a screen
+const getUserInfo = (req, res) => {
+    let userInfo = {
+        authenticated: undefined
+    };
+    if (req.isAuthenticated()) {
+        userInfo.authenticated = true;
+        getUser(req.user).then(r => {
+            console.log(r)
+            Object.assign(userInfo, r)
+            res.send(userInfo)
+        })
+    } else {
+        userInfo.authenticated = false;
+        res.send(userInfo);
+    }
 };
 
+const getUser = async (id: string) =>
+    await prisma.user.findUnique({where: {id: id}})
 
-// If no rank is specified it will return a list of all users. Otherwise it will return a list of all users with that rank
-// Returns a JSON list of users, each user has a DiscordId, Username, and Rank. For more info about a user, do getUser(discordId)
-const getUsers = (req, res) =>
-    userdatabase.all('SELECT id,username,rank FROM accounts ORDER BY rank,id', [], (err, rows) => {
-        if (rows == undefined) { // No users exist, excuse me... WHAT?
-            res.send('No users in database with that rank?');
-        } else { // If user exists, just assign
-            res.send(JSON.parse(JSON.stringify(rows)));
-        }
-    });
+const getUsers = async (req, res) =>
+    res.send(await prisma.user.findMany())
 
 const userExists = async (id: string): Promise<boolean> =>
-    await userdatabase.get('SELECT * FROM accounts WHERE id = ?', [id], (err, row) => {
-        return row !== undefined;
-    });
+    await prisma.user.findUnique({where: {id: id}}) !== null;
 
 
 const urlPrefix = production ? '/' : '/api/';
@@ -310,16 +285,17 @@ app.get(urlPrefix + '__getpost__', getArticle);
 
 app.post(urlPrefix + '__newpost__', requirePermission('guest'), handleCreatePost);
 
-app.post(urlPrefix + '__editpost__', requirePermission('guest'), editPost);
+app.post(urlPrefix + '__editpost__', requirePermission('guest'), editArticle);
 
 app.get(urlPrefix + '__listposts__', getArticles);
 
 app.get(urlPrefix + 'archive/:fileName', archive.download);
 app.get(urlPrefix + 'archive', archive.index);
 app.post(urlPrefix + '__archive-upload__', requirePermission('trusted'), archive.uploadProcess);
+// FIXME
+app.get(urlPrefix + '__getalluserperms__', requirePermission('guest'), getUsers);
+app.post(urlPrefix + '__modifyuserperms__', requirePermission('guest'), modifyPermissions);
 
-app.get(urlPrefix + '__getalluserperms__', requirePermission('mod'), getUsers);
-app.post(urlPrefix + '__modifyuserperms__', requirePermission('mod'), modifyPermissions);
 
 app.get(urlPrefix + 'auth', (req, res, next) => {
     let redirect = utils.cast('string', req.query.redirect);

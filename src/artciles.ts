@@ -7,18 +7,12 @@ const metadataFile = `${dir}/metadata.json`
 const {greenBright, magenta} = require('chalk')
 const sqlite3 = require('sqlite3');
 
-let db = new sqlite3.Database('./Articles.db', (err) => {
-    if (err) {
-        console.error(err.message);
-    }
-    console.log(magenta('Connected to the Articles database.'));
-});
-db.serialize(() => {
-    db.run('CREATE TABLE IF NOT EXISTS "articles" ("id" VARCHAR(100) NOT NULL UNIQUE, "title" VARCHAR NOT NULL, "tag" VARCHAR, "description" VARCHAR NOT NULL, "last_edited" INT, "edit_count" INT, PRIMARY KEY("id"));');
-});
+import {PrismaClient} from "@prisma/client"
+
+const prisma = new PrismaClient();
 
 // ===== POST METADATA ===== //
-class PostMetadata {
+export class PostMetadata {
     id: number;
     title: string;
     tag: string;
@@ -41,7 +35,7 @@ const postMetadata: Map<number, PostMetadata> = new Map();
 let nextPostId = 0;
 const initialize = (): void => {
     let metadata;
-    let needsToSave:boolean = false;
+    let needsToSave: boolean = false;
     if (existsSync(metadataFile)) {
         metadata = JSON.parse(readFileSync(metadataFile, 'utf8'));
     } else {
@@ -108,7 +102,7 @@ const initialize = (): void => {
     });
 };
 
-const saveMetadata = async (): Promise<void> => {
+export const saveMetadata = async (): Promise<void> => {
     await writeFile(metadataFile, JSON.stringify({
         nextPostId: nextPostId,
         posts: Array.from(postMetadata.values())
@@ -120,17 +114,24 @@ const saveMetadata = async (): Promise<void> => {
         }
     });
 }
-
+//get metadata from memory - from the metadata.json
 export const getAllMetadata = (): PostMetadata[] => Array.from(postMetadata.values());
 
-export const postExists = (postId: number):boolean => postMetadata.has(postId);
+//get metadata from the database via prisma
+export const getMetadataDB = async () => await prisma["article"].findMany()
+
+export const postExists = (postId: number): boolean => postMetadata.has(postId);
+
+export const postExistsDB = async (id: number) => {
+    return await prisma["article"].findUnique({where: {id: id}}) !== null;
+}
 
 export const getMetadata = (postId: number): PostMetadata => postMetadata.get(postId);
 
 
 // ===== POST BODY ===== //
 
-const postBodyCacheLimit:number = 100;
+const postBodyCacheLimit: number = 100;
 const postBodyCache: Map<number, string> = new Map();
 
 const getPostBody = async (postId: number) => {
@@ -154,7 +155,7 @@ const getPostBody = async (postId: number) => {
 };
 
 
-const setPostBody = async (postId: number, newBody: string) => {
+export const setPostBody = async (postId: number, newBody: string) => {
     if (!postBodyCache.has(postId)) {
         while (postBodyCache.size >= postBodyCacheLimit) {
             postBodyCache.delete(postBodyCache.keys().next().value);
@@ -176,7 +177,7 @@ const setPostBody = async (postId: number, newBody: string) => {
 
 // ===== GIT ===== //
 
-const commit = async (postId, message, author, email = `${author}@technicalmc.xyz`) => {
+export const commit = async (postId, message, author, email = `${author}@technicalmc.xyz`) => {
     if (typeof (author) === 'object') {
         let gitUsername = author.discordName;
         if (gitUsername.length > 34) {
@@ -201,18 +202,18 @@ const commit = async (postId, message, author, email = `${author}@technicalmc.xy
     console.log(`Committed change ${commitId} to file ${postId}.json`);
 }
 
-const createMetadataDB = async (metadata: PostMetadata): Promise<void | null> =>
-    await db.get('SELECT title FROM articles WHERE id = ?;', [metadata.id], (err, row) => {
-        if (row == undefined) { // If user does not exist
-            db.run('insert into articles(id,title,tag,description,edit_count) values (?,?,?,?,?)', [metadata.id, metadata.title, metadata.tag, metadata.description, 0], (err) => {
-                if (err) {
-                    console.error(err.message);
-                } else {
-                    console.log(`Added post number ${metadata.id} - ${metadata.title}`)
-                }
-            });
-        } else { // If user exists, overwrite the database with the their information, in case they updated their profile
-            return null
+export const removePostDB = async (id: number) =>
+    await prisma.article.delete({
+        where: {id: id}
+    })
+const createMetadataDB = async (metadata: PostMetadata) =>
+    await prisma["article"].create({
+        data: {
+            title: metadata.title,
+            tag: metadata.tag,
+            description: metadata.description,
+            last_edited: metadata.last_edited,
+            edit_count: metadata.edit_count
         }
     });
 

@@ -1,4 +1,3 @@
-"use strict";
 exports.__esModule = true;
 var cast = function (type, value) {
     if (typeof (value) !== type) {
