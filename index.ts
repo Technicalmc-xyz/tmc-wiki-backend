@@ -1,4 +1,6 @@
 import {PrismaClient} from "@prisma/client"
+import {exists} from "fs";
+
 const prisma = new PrismaClient();
 const {randomBytes} = require('crypto');
 const express = require('express');
@@ -137,7 +139,7 @@ const getArticle = async (req, res) => {
     }
     const networkPost = await articles.getNetworkPostObject(postId);
     console.log(await articles.postExistsDB(postId));
-    await articles.removePostDB(postId);
+    // await articles.removePostDB(postId);
     // See what post number is being requested
     // Console.log('Post ID Number: ' + postId);
     res.send(networkPost);
@@ -169,6 +171,68 @@ const getArticles = async (req, res) => {
     // if (start + n > length) n = length - start;
     //
     res.send(myArticles);
+};
+const articleExists = async (id: number): Promise<boolean> =>
+    await prisma.article.findUnique({where: {id: id}}) !== null;
+
+const removeArticle = async (req, res) => {
+    const reqBody = utils.cast('object', req.body);
+    const id = utils.cast('number', reqBody.id);
+    articleExists(id).then(async exists => {
+        if (exists) {
+            await prisma.article.delete({
+                where: {id: id}
+            })
+            console.log(magenta(`Article ${id} was removed`));
+            return res.status(200).send(`Article ${id} was removed`)
+        } else {
+            return res.status(403).send("This article does not exist")
+        }
+    })
+        .catch(err => {
+            console.log(red(err));
+            return res.status(403).send(err)
+        })
+};
+const publicizePost = async (req, res) => {
+    const reqBody = utils.cast('object', req.body);
+    const id = utils.cast('number', reqBody.id);
+    articleExists(id).then(async exists => {
+        if (exists) {
+            await prisma.article.update({
+                where: {id: id},
+                data: {status: `PUBLIC`}
+            })
+            console.log(magenta(`Article ${id} was publicized`));
+            return res.status(200).send(`Article ${id} was publicized`)
+        } else {
+            return res.status(403).send("This article does not exist")
+        }
+    })
+        .catch(err => {
+            console.log(red(err));
+            return res.status(403).send(err)
+        })
+};
+const privatizePost = async (req, res) => {
+    const reqBody = utils.cast('object', req.body);
+    const id = utils.cast('number', reqBody.id);
+    articleExists(id).then(async exists => {
+        if (exists) {
+            await prisma.article.update({
+                where: {id: id},
+                data: {status: `PRIVATE`}
+            })
+            console.log(magenta(`Article ${id} was privatized`));
+            return res.status(200).send(`Article ${id} was privatized`)
+        } else {
+            return res.status(403).send("This article does not exist")
+        }
+    })
+        .catch(err => {
+            console.log(red(err));
+            return res.status(403).send(err)
+        })
 };
 
 const logout = (req, res) => {
@@ -259,7 +323,6 @@ const getUserInfo = (req, res) => {
     if (req.isAuthenticated()) {
         userInfo.authenticated = true;
         getUser(req.user).then(r => {
-            console.log(r)
             Object.assign(userInfo, r)
             res.send(userInfo)
         })
@@ -269,8 +332,9 @@ const getUserInfo = (req, res) => {
     }
 };
 
-const getUser = async (id: string) =>
-    await prisma.user.findUnique({where: {id: id}})
+const getUser = async (id: string) => {
+    return await prisma.user.findUnique({where: {id: id}})
+}
 
 const getUsers = async (req, res) =>
     res.send(await prisma.user.findMany())
@@ -288,6 +352,11 @@ app.post(urlPrefix + '__newpost__', requirePermission('guest'), handleCreatePost
 app.post(urlPrefix + '__editpost__', requirePermission('guest'), editArticle);
 
 app.get(urlPrefix + '__listposts__', getArticles);
+
+app.post(urlPrefix + '__removepost__', requirePermission("mod") , removeArticle);
+
+app.post(urlPrefix + '__publicize__', requirePermission("mod") , publicizePost);
+app.post(urlPrefix + '__privatize__', requirePermission("mod") , privatizePost);
 
 app.get(urlPrefix + 'archive/:fileName', archive.download);
 app.get(urlPrefix + 'archive', archive.index);

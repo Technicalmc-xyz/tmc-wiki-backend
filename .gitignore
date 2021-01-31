@@ -127,7 +127,7 @@ metadata.json
 /data
 *.db
 /.idea
-
+prisma/migrations
 # archive data
 archive/*
 !archive/.nodelete
