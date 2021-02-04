@@ -4,9 +4,9 @@ const {existsSync, promises, readFileSync, writeFile} = require('fs');
 const Git = require('nodegit');
 const dir = './posts';
 const metadataFile = `${dir}/metadata.json`
-const {greenBright, magenta} = require('chalk')
+const {greenBright, magenta, red} = require('chalk')
 const sqlite3 = require('sqlite3');
-
+const utils = require('../utils/utils.ts');
 import {PrismaClient} from "@prisma/client"
 
 const prisma = new PrismaClient();
@@ -101,7 +101,7 @@ const initialize = (): void => {
             });
     });
 };
-
+// LEGACY?
 export const saveMetadata = async (): Promise<void> => {
     await writeFile(metadataFile, JSON.stringify({
         nextPostId: nextPostId,
@@ -114,17 +114,88 @@ export const saveMetadata = async (): Promise<void> => {
         }
     });
 }
-//get metadata from memory - from the metadata.json
-export const getAllMetadata = (): PostMetadata[] => Array.from(postMetadata.values());
 
-//get metadata from the database via prisma
-export const getMetadataDB = async () => await prisma["article"].findMany()
+//get the all of the metadata - ordered from newest to oldest
+export const getAllMetadata = async () => await prisma.article.findMany({
+    orderBy: {
+        id: 'desc'
+    }
+})
+// get all of the public metadata - ordered from newest to oldest
+export const getPublicMetadataDB = async () => await prisma.article.findMany({
+    where: {publicized: true},
+    orderBy: {
+        id: 'desc'
+    }
+})
 
-export const postExists = (postId: number): boolean => postMetadata.has(postId);
+export const articleExists = async (id: number): Promise<boolean> =>
+    await prisma.article.findUnique({where: {id: id}}) !== null;
 
-export const postExistsDB = async (id: number) => {
-    return await prisma["article"].findUnique({where: {id: id}}) !== null;
-}
+export const removeArticle = async (req, res) => {
+    const reqBody = utils.cast('object', req.body);
+    const id = utils.cast('number', reqBody.id);
+    articleExists(id).then(async exists => {
+        if (exists) {
+            await prisma.article.delete({
+                where: {id: id}
+            })
+            console.log(magenta(`Article ${id} was removed`));
+            return res.status(200).send(`Article ${id} was removed`)
+        } else {
+            return res.status(403).send("This article does not exist")
+        }
+    })
+        .catch(err => {
+            console.log(red(err));
+            return res.status(403).send(err)
+        })
+};
+
+export const publicizePost = async (req, res) => {
+    const reqBody = utils.cast('object', req.body);
+    const id = utils.cast('number', reqBody.id);
+    articleExists(id).then(async exists => {
+        if (exists) {
+            await prisma.article.update({
+                where: {id: id},
+                data: {
+                    publicized: true,
+                    status: false,
+                }
+            })
+            console.log(magenta(`Article ${id} was publicized`));
+            return res.status(200).send(`Article ${id} was publicized`)
+        } else {
+            return res.status(403).send("This article does not exist")
+        }
+    })
+        .catch(err => {
+            console.log(red(err));
+            return res.status(403).send(err)
+        })
+};
+
+export const privatizePost = async (req, res) => {
+    const reqBody = utils.cast('object', req.body);
+    const id = utils.cast('number', reqBody.id);
+    articleExists(id).then(async exists => {
+        if (exists) {
+            await prisma.article.update({
+                where: {id: id},
+                data: {publicized: false}
+            })
+            console.log(magenta(`Article ${id} was privatized`));
+            return res.status(200).send(`Article ${id} was privatized`)
+        } else {
+            return res.status(403).send("This article does not exist")
+        }
+    })
+        .catch(err => {
+            console.log(red(err));
+            return res.status(403).send(err)
+        })
+};
 
 export const getMetadata = (postId: number): PostMetadata => postMetadata.get(postId);
 
@@ -202,10 +273,7 @@ export const commit = async (postId, message, author, email = `${author}@technic
     console.log(`Committed change ${commitId} to file ${postId}.json`);
 }
 
-export const removePostDB = async (id: number) =>
-    await prisma.article.delete({
-        where: {id: id}
-    })
+
 const createMetadataDB = async (metadata: PostMetadata) =>
     await prisma["article"].create({
         data: {
@@ -226,15 +294,18 @@ export const createPost = async (author: string, title: string, description: str
     metadata.title = title;
     metadata.description = description;
     metadata.tag = tag;
-    postMetadata.set(postId, metadata);
     await saveMetadata();
+    await postMetadata.set(postId, metadata);
     await createMetadataDB(metadata);
     await commit(postId, `Create ${title}`, author);
     return metadata;
 }
 
 export const getNetworkPostObject = async (postId: number) => {
-    const metadata = getMetadata(postId);
+    const metadata = await prisma.article.findUnique({
+        where: {id: postId}
+    })
+    await console.log(`Metadata = ${metadata}`)
     return {
         id: postId,
         title: metadata.title,
@@ -242,7 +313,9 @@ export const getNetworkPostObject = async (postId: number) => {
         tag: metadata.tag,
         last_edited: metadata.last_edited,
         editCount: metadata.edit_count,
+        status: metadata.status,
         body: await getPostBody(postId)
     };
 }
+
 initialize();
