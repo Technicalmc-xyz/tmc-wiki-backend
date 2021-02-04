@@ -1,5 +1,6 @@
 import {PrismaClient} from "@prisma/client"
 import {exists} from "fs";
+import {getAllMetadata} from "./src/artciles";
 
 const prisma = new PrismaClient();
 const {randomBytes} = require('crypto');
@@ -14,10 +15,10 @@ const {greenBright, magenta, red} = require('chalk')
 const xss = require('xss-clean');
 const fileUpload = require('express-fileupload');
 
-const articles = require('./src/artciles');
-const archive = require('./src/archive');
-const utils = require('./utils/utils');
-
+const articles = require('./src/artciles.ts');
+const archive = require('./src/archive.ts');
+const utils = require('./utils/utils.ts');
+const fetch = require('node-fetch')
 const rankList = ['banned', 'guest', 'trusted', 'editor', 'dev', 'mod']; // 0=banned, 1=guest, 2=trusted, 3=editor, 4=mod, 5=dev
 
 
@@ -91,6 +92,30 @@ app.use(xss());
 app.use(compression());
 app.use(fileUpload({createParentPath: true}));
 
+const discordWebhook = async (username, avatar, userid, title, articleid, description, tags) => {
+    fetch('https://discord.com/api/webhooks/805963511791878154/xCNeSXCgk5vQNtE4CSkj_MAHi9eKZ050jj0h6LR-JDYFhTmMjpWtFs0ToOIwq-HKdv7N', {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            "username": "Article Bot",
+            "avatar_url": 'https://static.wikia.nocookie.net/minecraft/images/d/d3/KnowledgeBookNew.png/revision/latest/top-crop/width/220/height/220?cb=20190917030625',
+            "embeds": [{
+                "title": `${title} 📚`,
+                "url": `https://technicalmc.xyz/render-article/${articleid}`,
+                "author": {
+                    "name": username,
+                    "icon_url": `https://cdn.discordapp.com/avatars/${userid}/${avatar}.png`,
+                },
+            }],
+            "description": description,
+            "footer": {
+                "text": tags,
+            },
+        })
+    });
+}
 const handleCreatePost = async (req, res) => {
     const reqBody = utils.cast('object', req.body);
     const body = utils.cast('string', reqBody.body);
@@ -99,6 +124,11 @@ const handleCreatePost = async (req, res) => {
     const description = utils.cast('string', reqBody.description);
     const metadata = await articles.createPost(req.user, title, description, tags, body);
     console.log(`Created post #${metadata.id}`);
+    const user = await getUser(req.user)
+    const username = user.username
+    const userid = user.id
+    const avatar = user.avatar
+    await discordWebhook(username, avatar, userid, title, metadata.id, description, tags);
     res.send('OK');
 };
 
@@ -123,29 +153,27 @@ const editArticle = async (req, res) => {
     metadata.tag = utils.cast('string', reqBody.tags);
     metadata.description = utils.cast('string', reqBody.description);
     metadata.last_edited = new Date().toDateString();
-    await articles.saveMetadata();
     await articles.commit(postId, message, req.user);
+    await articles.saveMetadata();
     console.log(`Edited post #${postId}`)
     res.send('OK');
 };
 
 const getArticle = async (req, res) => {
     const postId = utils.cast('number', +utils.cast('object', req.query).id);
-    console.log(typeof postId)
     console.log(postId)
     if (!articles.postExists(postId)) {
         res.status(404).send(`No such post ID ${postId}`);
         return;
     }
     const networkPost = await articles.getNetworkPostObject(postId);
-    console.log(await articles.postExistsDB(postId));
     // await articles.removePostDB(postId);
     // See what post number is being requested
     // Console.log('Post ID Number: ' + postId);
     res.send(networkPost);
 };
 
-const getArticles = async (req, res) => {
+const getPublicArticles = async (req, res) => {
     // TODO implement this back
     // const query = utils.cast('object', req.query);
     // let n = utils.cast('number', +query.n) || 5;
@@ -153,9 +181,7 @@ const getArticles = async (req, res) => {
     // let start = utils.cast('number', +query.start) || 0;
     // if (start < 0) start = 0;
     // const q = utils.cast('string', query.q);
-
-    let myArticles = await articles.getMetadataDB();
-    console.log(myArticles)
+    let myArticles = await articles.getPublicMetadataDB();
     // if (q) {
     //     // TODO: sorting
     // } else {
@@ -172,68 +198,11 @@ const getArticles = async (req, res) => {
     //
     res.send(myArticles);
 };
-const articleExists = async (id: number): Promise<boolean> =>
-    await prisma.article.findUnique({where: {id: id}}) !== null;
+const getAllArticles = async (req,res)=> {
+    let myArticles = await articles.getAllMetadata();
+    res.send(myArticles);
+}
 
-const removeArticle = async (req, res) => {
-    const reqBody = utils.cast('object', req.body);
-    const id = utils.cast('number', reqBody.id);
-    articleExists(id).then(async exists => {
-        if (exists) {
-            await prisma.article.delete({
-                where: {id: id}
-            })
-            console.log(magenta(`Article ${id} was removed`));
-            return res.status(200).send(`Article ${id} was removed`)
-        } else {
-            return res.status(403).send("This article does not exist")
-        }
-    })
-        .catch(err => {
-            console.log(red(err));
-            return res.status(403).send(err)
-        })
-};
-const publicizePost = async (req, res) => {
-    const reqBody = utils.cast('object', req.body);
-    const id = utils.cast('number', reqBody.id);
-    articleExists(id).then(async exists => {
-        if (exists) {
-            await prisma.article.update({
-                where: {id: id},
-                data: {status: `PUBLIC`}
-            })
-            console.log(magenta(`Article ${id} was publicized`));
-            return res.status(200).send(`Article ${id} was publicized`)
-        } else {
-            return res.status(403).send("This article does not exist")
-        }
-    })
-        .catch(err => {
-            console.log(red(err));
-            return res.status(403).send(err)
-        })
-};
-const privatizePost = async (req, res) => {
-    const reqBody = utils.cast('object', req.body);
-    const id = utils.cast('number', reqBody.id);
-    articleExists(id).then(async exists => {
-        if (exists) {
-            await prisma.article.update({
-                where: {id: id},
-                data: {status: `PRIVATE`}
-            })
-            console.log(magenta(`Article ${id} was privatized`));
-            return res.status(200).send(`Article ${id} was privatized`)
-        } else {
-            return res.status(403).send("This article does not exist")
-        }
-    })
-        .catch(err => {
-            console.log(red(err));
-            return res.status(403).send(err)
-        })
-};
 
 const logout = (req, res) => {
     getUser(req.user).then(r => {
@@ -351,12 +320,12 @@ app.post(urlPrefix + '__newpost__', requirePermission('guest'), handleCreatePost
 
 app.post(urlPrefix + '__editpost__', requirePermission('guest'), editArticle);
 
-app.get(urlPrefix + '__listposts__', getArticles);
+app.get(urlPrefix + '__listposts__', getPublicArticles);
 
-app.post(urlPrefix + '__removepost__', requirePermission("mod") , removeArticle);
-
-app.post(urlPrefix + '__publicize__', requirePermission("mod") , publicizePost);
-app.post(urlPrefix + '__privatize__', requirePermission("mod") , privatizePost);
+app.get(urlPrefix + '__getadminarticles__',requirePermission("mod"), getAllArticles);
+app.post(urlPrefix + '__removepost__', requirePermission("mod") , articles.removeArticle);
+app.post(urlPrefix + '__publicize__', requirePermission("mod") , articles.publicizePost);
+app.post(urlPrefix + '__privatize__', requirePermission("mod") , articles.privatizePost);
 
 app.get(urlPrefix + 'archive/:fileName', archive.download);
 app.get(urlPrefix + 'archive', archive.index);
