@@ -132,5 +132,9 @@ prisma/migrations
 archive/*
 !archive/.nodelete
 
+*.js
+*.js.map
+
+
 # Secrets
 configs/secret_config.json
