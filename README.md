@@ -1,9 +1,18 @@
 # Technical Minecraft Wiki API
 ![book](book.png)
 
+
+### Getting Started 
+Install the npm packages with `npm install`
+
 For development `npm run dev`
 
-For production `node index.ts pro`
+For production compile the typescript and then run 
+```console
+tsc
+
+node index.js pro
+```
 
 Eslint run with fix `npm pretest -- --fix`
 
