@@ -14,7 +14,8 @@ model Article {
   description String
   last_edited Int
   edit_count  Int
-  status      Status @default(PRIVATE)
+  status      Boolean @default(true)
+  publicized  Boolean     @default(false)
 
 }
 
@@ -24,10 +25,4 @@ model User {
   discriminator String
   avatar        String
   rank          String @default("guest")
-
-}
-
-enum Status {
-    PUBLIC
-    PRIVATE
 }
