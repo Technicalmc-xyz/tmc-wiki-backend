@@ -83,11 +83,11 @@ const saveMetadata = async () => {
 }
 const getAllMetadata = () => Array.from(postMetadata.values());
 //TODO make the transfer code
-const transferMetaData = () => {
+const transferMetaData = async () => {
     const metadata = getAllMetadata();
-    metadata.forEach(element =>
-        articles.createMetadataDB(element)
-    )
+    for (const element of metadata) {
+        await articles.createMetadataDB(element);
+    }
 }
 const main = async () => {
     initialize()
