@@ -1,8 +1,8 @@
 import {PrismaClient} from "@prisma/client"
 const prisma = new PrismaClient();
-const {greenBright, magenta, red} = require('chalk')
+const {greenBright, red} = require('chalk')
 const rankList = ['banned', 'guest', 'trusted', 'editor', 'dev', 'mod']; // 0=banned, 1=guest, 2=trusted, 3=editor, 4=mod, 5=dev
-const utils = require('../utils/utils.ts');
+const utils = require('../utils/utils');
 export const logout = (req, res) => {
     getUser(req.user).then(r => {
         console.log("id: " + r.id + "; Username: " + r.username + "; Has logged out!");

@@ -1,4 +1,3 @@
-export {}
 const {randomBytes} = require('crypto');
 const express = require('express');
 const compression = require('compression');
@@ -11,11 +10,10 @@ const {red} = require('chalk')
 const xss = require('xss-clean');
 const fileUpload = require('express-fileupload');
 
-const articles = require('./src/artciles.ts');
-const archive = require('./src/archive.ts');
-const users = require('./src/user.ts');
-const utils = require('./utils/utils.ts');
-const fetch = require('node-fetch')
+const articles = require('./src/artciles');
+const archive = require('./src/archive');
+const users = require('./src/user');
+const utils = require('./utils/utils');
 
 // Assumes that production and development are false and that you need to supply at least one argument
 let production: boolean = false;

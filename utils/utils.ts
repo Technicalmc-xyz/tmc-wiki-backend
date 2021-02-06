@@ -1,5 +1,5 @@
-export {}
-const cast = (type, value) => {
+
+export const cast = (type, value) => {
   if (typeof(value) !== type) {
     // Return default value of type
     switch (type) {
@@ -16,13 +16,13 @@ const cast = (type, value) => {
   }
   return value;
 };
-exports.cast = cast;
+
 
 const disallowedFileChars = RegExp('/\\\\;:');
-const sanitizeFilename = (str) => {
+export const sanitizeFilename = (str) => {
   if (str === '.' || str === '..') {
     return str.replace('.', '_');
   }
   return str.replace(disallowedFileChars, '_');
 };
-exports.sanitizeFilename = sanitizeFilename;
+

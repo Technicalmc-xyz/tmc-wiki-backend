@@ -1,16 +1,16 @@
-// Post parser
-export {};
+import {PrismaClient} from "@prisma/client"
+const prisma = new PrismaClient()
+
 const {existsSync, promises, readFileSync, writeFile} = require('fs');
 const Git = require('nodegit');
 const dir = './posts';
 const metadataFile = `${dir}/metadata.json`
 const {greenBright, magenta, red} = require('chalk')
 
-const utils = require('../utils/utils.ts');
-const users = require('./user.ts');
+const utils = require('../utils/utils');
+const users = require('./user');
 
-import {PrismaClient} from "@prisma/client"
-const prisma = new PrismaClient();
+
 // ===== POST METADATA ===== //
 export class PostMetadata {
     id: number;
