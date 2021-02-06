@@ -447,7 +447,7 @@ export const commit = async (postId, message, author, email = `${author}@technic
 }
 
 // add the metadata to the database
-const createMetadataDB = async (metadata: PostMetadata) =>
+export const createMetadataDB = async (metadata: PostMetadata) =>
     await prisma["article"].create({
         data: {
             title: metadata.title,

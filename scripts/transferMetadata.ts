@@ -1,12 +1,9 @@
 export {}
 
-import {PrismaClient} from "@prisma/client"
-const prisma = new PrismaClient();
-
-const dir = './posts'
-const metadataFile = `${dir}/metadata.json`
+const metadataFile = `./posts/metadata.json`
 const postMetadata = new Map();
-const {existsSync, promises, readFileSync, writeFile} = require('fs');
+const {existsSync, readFileSync, writeFile} = require('fs');
+const articles = require('../src/artciles')
 let nextPostId = 0;
 
 class PostMetadata {
@@ -86,9 +83,14 @@ const saveMetadata = async () => {
 }
 const getAllMetadata = () => Array.from(postMetadata.values());
 //TODO make the transfer code
-const transferMetaData = () => null
+const transferMetaData = () => {
+    const metadata = getAllMetadata();
+    metadata.forEach(element =>
+        articles.createMetadataDB(element)
+    )
+}
 const main = async () => {
     initialize()
-    await console.log(getAllMetadata())
+    transferMetaData()
 }
 main();
