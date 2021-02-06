@@ -1,6 +1,6 @@
 import {PrismaClient} from "@prisma/client"
 const prisma = new PrismaClient();
-const {greenBright, red} = require('chalk')
+const {greenBright, red, blue} = require('chalk')
 const rankList = ['banned', 'guest', 'trusted', 'editor', 'dev', 'mod']; // 0=banned, 1=guest, 2=trusted, 3=editor, 4=mod, 5=dev
 const utils = require('../utils/utils');
 export const logout = (req, res) => {
@@ -21,7 +21,7 @@ export interface LoginDatabaseParams {
 export const LoginDatabase = async ({id, username, discriminator, avatar}: LoginDatabaseParams) => {
     const user = await prisma["user"].findUnique({where: {id: id}});
     if (user === null) {
-        console.log(`id: ${id} - username: ${username} has signed up`)
+        console.log(blue(`id: ${id} - username: ${username} has signed up`))
         return await prisma["user"].create({
             data: {
                 id: id,
@@ -32,7 +32,7 @@ export const LoginDatabase = async ({id, username, discriminator, avatar}: Login
             }
         })
     } else {
-        console.log(`id: ${id} - username: ${username} has logged back in`)
+        console.log(blue(`id: ${id} - username: ${username} has logged back in`))
         return await prisma["user"].update({
             where: {id: id},
             data: {
@@ -46,7 +46,7 @@ export const LoginDatabase = async ({id, username, discriminator, avatar}: Login
 
 export const requirePermission = (rankRequired: string) => (req, res, next) => {
     if (!req.isAuthenticated()) {
-        console.log("THIS USER IS NOT AUTH'D");
+        console.log(red("THIS USER IS NOT AUTHENTICATED"));
         return res.status(403).send('Not authenticated');
     } else {
         getUser(req.user).then(r => {
@@ -75,7 +75,7 @@ export const modifyPermissions = async (req, res) => {
             data: {rank: rank}
         })
             .then(() => {
-                console.log(greenBright('Changed Rank for id: ' + id + ' to ' + rank));
+                console.log(blue('Changed Rank for id: ' + id + ' to ' + rank));
                 return res.status(200).send('Changed Rank for id: ' + id + ' to ' + rank);
             })
             .catch((err) => console.log(red(err)))

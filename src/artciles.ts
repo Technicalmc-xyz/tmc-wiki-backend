@@ -5,7 +5,8 @@ const {existsSync, promises, readFileSync, writeFile} = require('fs');
 const Git = require('nodegit');
 const dir = './posts';
 const metadataFile = `${dir}/metadata.json`
-const {greenBright, magenta, red} = require('chalk')
+const {greenBright, magenta, red, cyan, yellow} = require('chalk')
+import fetch from 'node-fetch'
 
 const utils = require('../utils/utils');
 const users = require('./user');
@@ -117,24 +118,24 @@ export const saveMetadata = async (): Promise<void> => {
 
 
 //update the metadata of an article in the database
-export const updateMetadata = async (
-    postid,
-    title,
-    tags,
+export const setMetadata = async (
+    id: number,
+    title: any,
+    tag,
     description,
-    last_edited,
     edit_count
-) =>
-    await prisma.article.update({
-        where: {id: postid},
+) => {
+    return await prisma.article.update({
+        where: {id: id},
         data: {
             title: title,
-            tag: tags,
+            tag: tag,
             description: description,
-            last_edited: last_edited,
+            last_edited: Date.now(),
             edit_count: edit_count
         }
-    })
+    });
+}
 
 export const discordWebhook = async (username, avatar, userid, title, articleid, description, tags) => {
     fetch('https://discord.com/api/webhooks/805963511791878154/xCNeSXCgk5vQNtE4CSkj_MAHi9eKZ050jj0h6LR-JDYFhTmMjpWtFs0ToOIwq-HKdv7N', {
@@ -168,7 +169,7 @@ export const handleCreatePost = async (req, res) => {
     const tags = utils.cast('string', reqBody.tags);
     const description = utils.cast('string', reqBody.description);
     const metadata = await createPost(req.user, title, description, tags, body);
-    console.log(`Created post #${metadata.id}`);
+    console.log(cyan(`Created post #${metadata.id}`));
 
     const user = await users.getUser(req.user)
     const username = user.username
@@ -182,12 +183,7 @@ export const handleCreatePost = async (req, res) => {
 
 export const editArticle = async (req, res) => {
     const postId = utils.cast('number', +utils.cast('object', req.query).id);
-    //LEGACY
-    // if (!postExists(postId)) {
-    //     res.status(404).send(`No such post ID ${postId}`);
-    //     return;
-    // }
-    //NEW
+
     if (!await articleExists(postId)) {
         res.status(404).send(`No such post ID ${postId}`);
         return;
@@ -195,54 +191,32 @@ export const editArticle = async (req, res) => {
 
     const reqBody = utils.cast('object', req.body);
 
-    //LEGACY
-    const metadata = getMetadata(postId);
-    if (metadata.edit_count !== utils.cast('number', req.body.lastEditCount)) {
-        res.send('OUTDATED');
-        return;
-    }
 
-    //NEW
     const metadataDB = await getMetadataDB(postId);
+    // test to see if the edit count has gone up, outdated
     if (metadataDB.edit_count !== utils.cast('number', req.body.lastEditCount)){
-        res.send('OUTDATED');
-        return;
+        return res.send('OUTDATED');
     }
-    metadata.edit_count++;
+    //if it is not updated go on with the edit
+    metadataDB.edit_count++;
 
     await setPostBody(postId, utils.cast('string', reqBody.body));
 
     const message = utils.cast('string', reqBody.message);
-
-    //LEGACY
-    metadata.title = utils.cast('string', reqBody.title);
-    metadata.tag = utils.cast('string', reqBody.tags);
-    metadata.description = utils.cast('string', reqBody.description);
-    //FIXME type issue
-    // metadata.last_edited = new Date();
-
-    //NEW
     metadataDB.title = utils.cast('string', reqBody.title);
     metadataDB.tag = utils.cast('string', reqBody.tags);
     metadataDB.description = utils.cast('string', reqBody.description);
 
-    //FIXME type issue
-    // metadataDB.last_edited = new Date().toDateString();
     await commit(postId, message, req.user);
 
-    //LEGACY
-    await saveMetadata();
+    await setMetadata(metadataDB.id, metadataDB.title, metadataDB.tag, metadataDB.description, metadataDB.edit_count)
 
-    //NEW
-    //FIXME add the correct parameters
-    // await articles.updateMetadata()
-    console.log(`Edited post #${postId}`)
+    console.log(cyan(`Edited post #${postId}`))
     res.send('OK');
 };
 
 export const getArticle = async (req, res) => {
     const postId = utils.cast('number', +utils.cast('object', req.query).id);
-    console.log(postId)
     if (!articleExists(postId)) {
         res.status(404).send(`No such post ID ${postId}`);
         return;
@@ -413,7 +387,7 @@ export const setPostBody = async (postId: number, newBody: string) => {
         if (err) {
             console.log(err);
         } else {
-            console.log(`Post ${postId} saved successfully`);
+            console.log(cyan(`Post ${postId} saved successfully`));
         }
     });
 }
@@ -443,7 +417,8 @@ export const commit = async (postId, message, author, email = `${author}@technic
     const authorSig = Git.Signature.now(author, email);
     const committerSig = Git.Signature.now('tmc-wiki', 'tmc-wiki@technicalmc.xyz');
     const commitId = await repo.createCommit('HEAD', authorSig, committerSig, `[${postId}] ${message}`, oid, [parent]);
-    console.log(`Committed change ${commitId} to file ${postId}.json`);
+
+    console.log(yellow(`Committed change ${commitId} to file ${postId}.json`));
 }
 
 // add the metadata to the database
@@ -478,7 +453,6 @@ export const getNetworkPostObject = async (postId: number) => {
     const metadata = await prisma.article.findUnique({
         where: {id: postId}
     })
-    await console.log(`Metadata = ${metadata}`)
     return {
         id: postId,
         title: metadata.title,

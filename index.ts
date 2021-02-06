@@ -6,7 +6,7 @@ const fs = require('fs');
 const passport = require('passport');
 const DiscordStrategy = require('passport-discord').Strategy;
 const session = require('express-session');
-const {red} = require('chalk')
+const {red, bgGreen} = require('chalk')
 const xss = require('xss-clean');
 const fileUpload = require('express-fileupload');
 
@@ -29,7 +29,7 @@ if (args[0] === 'pro') {
 } else {
     development = true;
 }
-console.log('arguments: ', args);
+console.log(bgGreen(`Running server in ${production ? "production" : "development"} mode`));
 
 if (!fs.existsSync('configs/secret_config.json')) {
     throw new Error('You need a secret_config.json file to store app secrets!');
@@ -132,5 +132,5 @@ app.get(urlPrefix + '__userinfo__', users.getUserInfo);
 
 const config = JSON.parse(fs.readFileSync('configs/config.json', 'utf8'));
 app.listen(config['port'], () => {
-    console.log(`Backend running on ${config['port']}`);
+    console.log(bgGreen(`Backend running on ${config['port']}`));
 });
