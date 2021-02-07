@@ -32,6 +32,10 @@ tsc
 node lib/scripts/mod_script.js [your-discord-id] mod
 ```
 
+4. Transfer the metadata from the metadata.json to the database
+```console
+node lib/scripts/transferMetadata.js
+```
 
 ## Production
 Compile the typescript and start the express server
