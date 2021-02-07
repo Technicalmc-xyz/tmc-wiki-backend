@@ -2,21 +2,47 @@
 ![book](book.png)
 
 
-### Getting Started 
-Install the npm packages with `npm install`
+## Getting Started 
+1. Install the npm packages with `npm install`
 
-For development `npm run dev`
+2. turn development server on `npm run dev`
+   
+3. [Turn on the database container](#postgres-database)
 
-For production compile the typescript and then run 
+4. View the database with `prisma studio`
+
+## On First Start
+
+1. Generate the new schema
+```console
+prisma generate
+```
+
+2. Migrate the database
+```console
+prisma migrate dev --preview-feature
+```
+
+3. Compile the typescript 
+```console
+tsc
+``` 
+3. Run the mod script to give the moderator role to yourself
+```console
+node lib/scripts/mod_script.js [your-discord-id] mod
+```
+
+
+## Production
+Compile the typescript and start the express server
 ```console
 tsc
 
 node index.js pro
 ```
 
-Eslint run with fix `npm pretest -- --fix`
 
-### Podman postgres database and backup of database
+## Postgres Database
 
 ```console
 podman pod create -n poddy -p 8080:8080,5432:5432
@@ -25,29 +51,26 @@ podman run -dt --pod tmc-wiki-pod --rm --name postgres-wiki -e POSTGRES_PASSWORD
 podman run --pod tmc-wiki-pod --rm -u postgres:postgres -e POSTGRES_HOST=postgres-wiki -e POSTGRES_DB=wiki -e POSTGRES_USER=user -e POSTGRES_PASSWORD=pass -e prodrigestivill/postgres-backup-local
 ```
 
-### Connect to the container in case of needing to run SQL commands
+## Additional Commands
+**lint**
+```console
+npm pretest -- --fix
+```
 
+**Connect to the container in case of needing to run SQL commands**
 ```console
 docker exec -it <PSQL-Container-ID> bash
 
 psql -h localhost -p 5432 -U user -d wiki -W
 ```
+**Prisma commands**
 
-
-### View database with prisma studio
-```console
-prisma studio
-```
-### Generate the new schema on change of the schema
+Generate the the schema
 ```console
 prisma generate
 ```
 
-### Migrate DB
+migrate the db
 ```console
 prisma migrate dev --preview-feature
 ```
-
-
-
-
