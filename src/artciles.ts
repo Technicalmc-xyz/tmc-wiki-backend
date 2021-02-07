@@ -33,53 +33,8 @@ export class PostMetadata {
 
 const postMetadata: Map<number, PostMetadata> = new Map();
 
-let nextPostId = 1;
+
 const initialize = (): void => {
-    let metadata;
-    let needsToSave: boolean = false;
-    if (existsSync(metadataFile)) {
-        metadata = JSON.parse(readFileSync(metadataFile, 'utf8'));
-    } else {
-        if (existsSync('metadata.json')) {
-            metadata = JSON.parse(readFileSync('metadata.json', 'utf8'));
-        } else {
-            metadata = null;
-        }
-        needsToSave = true;
-    }
-
-    if (metadata) {
-        if (Array.isArray(metadata)) {
-            // legacy format
-            for (let post of metadata) {
-                post.id = +post.id;
-                post.edit_count = post.edit_count || 0;
-                postMetadata.set(post.id, Object.assign(new PostMetadata(), post));
-                if (post.id >= nextPostId) {
-                    nextPostId = post.id + 1;
-                }
-            }
-        } else {
-            nextPostId = metadata.nextPostId;
-            for (let post of metadata.posts) {
-                if (typeof (post.last_edited) === 'string') {
-                    // Legacy last_edited format (from Date.toDateString())
-                    const parts = post.last_edited.split(' ');
-                    const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].indexOf(parts[1]);
-                    const day = +parts[2];
-                    const year = +parts[3];
-                    post.last_edited = new Date(year, month, day).getTime();
-                }
-
-                postMetadata.set(post.id, Object.assign(new PostMetadata(), post));
-            }
-        }
-    }
-
-    if (needsToSave) {
-        saveMetadata().then(() => console.log('Written initial metadata.json file'));
-    }
-
     Git.Repository.open(`${dir}/.git`).then(() => console.log(greenBright('Found posts git repository')), () => {
         let repo, index;
         Git.Repository.init(dir, 0).then(r => {
@@ -102,19 +57,6 @@ const initialize = (): void => {
             });
     });
 };
-// LEGACY?
-export const saveMetadata = async (): Promise<void> => {
-    await writeFile(metadataFile, JSON.stringify({
-        nextPostId: nextPostId,
-        posts: Array.from(postMetadata.values())
-    }, null, 2), (err) => {
-        if (err) {
-            console.log(err);
-        } else {
-            console.log('Metadata saved correctly');
-        }
-    });
-}
 
 
 //update the metadata of an article in the database
@@ -379,9 +321,7 @@ export const setPostBody = async (postId: number, newBody: string) => {
             postBodyCache.delete(postBodyCache.keys().next().value);
         }
     }
-
     const beautified: string = JSON.stringify(JSON.parse(newBody), null, 2);
-
     postBodyCache.set(postId, newBody);
     await writeFile(`${dir}/${postId}.json`, beautified, {encoding: 'utf8'}, (err) => {
         if (err) {
@@ -431,22 +371,21 @@ export const createMetadataDB = async (metadata: PostMetadata) =>
             last_edited: metadata.last_edited,
             edit_count: metadata.edit_count
         }
-    });
+    })
 
+//FIXME check for race condition
 export const createPost = async (author: string, title: string, description: string, tag: string, body: any) => {
-    const postId = nextPostId++;
-    // save post body before metadata to avoid race condition
-    await setPostBody(postId, body);
     const metadata = new PostMetadata();
-    metadata.id = postId;
     metadata.title = title;
     metadata.description = description;
     metadata.tag = tag;
-    await saveMetadata();
+
+    const metadatadb = await createMetadataDB(metadata);
+    const postId = metadatadb.id;
+    await setPostBody(postId, body);
     await postMetadata.set(postId, metadata);
-    await createMetadataDB(metadata);
     await commit(postId, `Create ${title}`, author);
-    return metadata;
+    return metadatadb;
 }
 
 export const getNetworkPostObject = async (postId: number) => {
