@@ -96,6 +96,10 @@ app.post(urlPrefix + '__newpost__', users.requirePermission('guest'), articles.h
 app.post(urlPrefix + '__editpost__', users.requirePermission('guest'), articles.editArticle);
 
 app.get(urlPrefix + '__listposts__', articles.getPublicArticles);
+app.get(urlPrefix + '__featured__', articles.getFeaturedMetadata);
+
+app.post(urlPrefix + '__feature__',users.requirePermission("mod"), articles.featureArticle);
+app.post(urlPrefix + '__unfeature__',users.requirePermission("mod"), articles.unfeatureArticle);
 
 app.get(urlPrefix + '__getadminarticles__',users.requirePermission("mod"), articles.getAllArticles);
 app.post(urlPrefix + '__removepost__', users.requirePermission("mod") , articles.removeArticle);
@@ -105,9 +109,9 @@ app.post(urlPrefix + '__privatize__', users.requirePermission("mod") , articles.
 app.get(urlPrefix + 'archive/:fileName', archive.download);
 app.get(urlPrefix + 'archive', archive.index);
 app.post(urlPrefix + '__archive-upload__', users.requirePermission('trusted'), archive.uploadProcess);
-// FIXME
-app.get(urlPrefix + '__getalluserperms__', users.requirePermission('guest'), users.getUsers);
-app.post(urlPrefix + '__modifyuserperms__', users.requirePermission('guest'), users.modifyPermissions);
+
+app.get(urlPrefix + '__getalluserperms__', users.requirePermission('mod'), users.getUsers);
+app.post(urlPrefix + '__modifyuserperms__', users.requirePermission('mod'), users.modifyPermissions);
 
 
 app.get(urlPrefix + 'auth', (req, res, next) => {

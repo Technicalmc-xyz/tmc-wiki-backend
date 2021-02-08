@@ -15,8 +15,8 @@ model Article {
   last_edited Int
   edit_count  Int
   status      Boolean @default(true)
-  publicized  Boolean     @default(false)
-
+  publicized  Boolean @default(false)
+  featured    Boolean @default(false)
 }
 
 model User {

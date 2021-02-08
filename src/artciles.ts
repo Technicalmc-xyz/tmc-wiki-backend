@@ -159,12 +159,18 @@ export const editArticle = async (req, res) => {
 
 export const getArticle = async (req, res) => {
     const postId = utils.cast('number', +utils.cast('object', req.query).id);
-    if (!articleExists(postId)) {
-        res.status(404).send(`No such post ID ${postId}`);
-        return;
-    }
-    const networkPost = await getNetworkPostObject(postId);
-    res.send(networkPost);
+    articleExists(postId)
+        .then((response) => {
+            if (response) {
+                const networkPost = getNetworkPostObject(postId)
+                    .then((networkPost) => res.send(networkPost))
+                    .catch((err) => res.status(404).send(`No such post ID ${err}`))
+            }
+            else {
+                res.status(404).send(`No such post ID ${postId}`);
+                return;
+            }
+        })
 };
 
 export const getPublicArticles = async (req, res) => {
@@ -210,10 +216,66 @@ export const getPublicMetadata = async () => await prisma.article.findMany({
     }
 })
 
+export const getFeaturedMetadata = async (req, res) => {
+    const featured = await prisma.article.findMany({
+        where: {featured: true},
+        orderBy: {
+            id: 'desc'
+        }
+    })
+    res.send(featured)
+}
+
 // find if the article exists
 export const articleExists = async (id: number): Promise<boolean> =>
     await prisma.article.findUnique({where: {id: id}}) !== null;
 
+export const featureArticle = async (req, res) => {
+    const reqBody = utils.cast('object', req.body);
+    const id = utils.cast('number', reqBody.id);
+    articleExists(id).then(async exists => {
+        if (exists) {
+            await prisma.article.update({
+                where: {id: id},
+                data: {
+                    featured: true,
+                    publicized: true
+                }
+            })
+            console.log(magenta(`Article ${id} was featured`));
+            return res.status(200).send(`Article ${id} was featured`)
+        } else {
+            return res.status(403).send("This article does not exist")
+        }
+    })
+        .catch(err => {
+            console.log(red(err));
+            return res.status(403).send(err)
+        })
+};
+
+export const unfeatureArticle = async (req, res) => {
+    const reqBody = utils.cast('object', req.body);
+    const id = utils.cast('number', reqBody.id);
+    articleExists(id).then(async exists => {
+        if (exists) {
+            await prisma.article.update({
+                where: {id: id},
+                data: {
+                    featured: false,
+                }
+            })
+            console.log(magenta(`Article ${id} was unfeatured`));
+            return res.status(200).send(`Article ${id} was unfeatured`)
+        } else {
+            return res.status(403).send("This article does not exist")
+        }
+    })
+        .catch(err => {
+            console.log(red(err));
+            return res.status(403).send(err)
+        })
+};
 
 export const removeArticle = async (req, res) => {
     const reqBody = utils.cast('object', req.body);
@@ -266,7 +328,10 @@ export const privatizeArticle = async (req, res) => {
         if (exists) {
             await prisma.article.update({
                 where: {id: id},
-                data: {publicized: false}
+                data: {
+                    publicized: false,
+                    featured: false
+                }
             })
             console.log(magenta(`Article ${id} was privatized`));
             return res.status(200).send(`Article ${id} was privatized`)
@@ -399,7 +464,8 @@ export const getNetworkPostObject = async (postId: number) => {
         tag: metadata.tag,
         last_edited: metadata.last_edited,
         editCount: metadata.edit_count,
-        status: metadata.status,
+        publicized: metadata.publicized,
+        featured: metadata.featured,
         body: await getPostBody(postId)
     };
 }

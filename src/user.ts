@@ -5,7 +5,7 @@ const rankList = ['banned', 'guest', 'trusted', 'editor', 'dev', 'mod']; // 0=ba
 const utils = require('../utils/utils');
 export const logout = (req, res) => {
     getUser(req.user).then(r => {
-        console.log("id: " + r.id + "; Username: " + r.username + "; Has logged out!");
+        console.log(blue("id: " + r.id + "; Username: " + r.username + "; Has logged out!"));
     })
     req.logout();
     res.redirect('/');
