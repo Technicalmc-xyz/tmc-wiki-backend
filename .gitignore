@@ -134,7 +134,3 @@ archive/*
 
 *.js
 *.js.map
-
-
-# Secrets
-configs/secret_config.json

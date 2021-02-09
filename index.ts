@@ -9,7 +9,7 @@ const session = require('express-session');
 const {red, bgGreen} = require('chalk')
 const xss = require('xss-clean');
 const fileUpload = require('express-fileupload');
-
+require('dotenv').config()
 const articles = require('./src/artciles');
 const archive = require('./src/archive');
 const users = require('./src/user');
@@ -31,11 +31,11 @@ if (args[0] === 'pro') {
 }
 console.log(bgGreen(`Running server in ${production ? "production" : "development"} mode`));
 
-if (!fs.existsSync('configs/secret_config.json')) {
-    throw new Error('You need a secret_config.json file to store app secrets!');
+if (!fs.existsSync('.env')) {
+    throw new Error(red('You need an .env file to run this server'));
 }
 
-const secretConfig = JSON.parse(fs.readFileSync('configs/secret_config.json', 'utf8'));
+const secretConfig = process.env.DISCORD_SECRET;
 
 const app = express();
 passport.serializeUser((user, callback) => {
@@ -53,7 +53,7 @@ passport.deserializeUser((discordId: string, callback) => {
 
 passport.use('discord', new DiscordStrategy({
     clientID: '773179848587608095',
-    clientSecret: secretConfig.discord_client_secret,
+    clientSecret: secretConfig,
     callbackURL: development ? '/api/auth/success' : 'https://technicalmc.xyz/api/auth/success', // FIXME
     scope: ['identify'],
     customHeaders: []
@@ -133,8 +133,6 @@ app.get(urlPrefix + 'auth/success', (req, res, next) => {
 app.get(urlPrefix + 'auth/logout', users.requirePermission('banned'), users.logout);
 
 app.get(urlPrefix + '__userinfo__', users.getUserInfo);
-
-const config = JSON.parse(fs.readFileSync('configs/config.json', 'utf8'));
-app.listen(config['port'], () => {
-    console.log(bgGreen(`Backend running on ${config['port']}`));
+app.listen(process.env.PORT, () => {
+    console.log(bgGreen(`Backend running on ${process.env.PORT}`));
 });

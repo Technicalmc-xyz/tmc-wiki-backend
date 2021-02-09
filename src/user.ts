@@ -1,8 +1,11 @@
 import {PrismaClient} from "@prisma/client"
 const prisma = new PrismaClient();
-const {greenBright, red, blue} = require('chalk')
+const {red, blue} = require('chalk')
+
 const rankList = ['banned', 'guest', 'trusted', 'editor', 'dev', 'mod']; // 0=banned, 1=guest, 2=trusted, 3=editor, 4=mod, 5=dev
+
 const utils = require('../utils/utils');
+const webhook = require('./webhooks')
 export const logout = (req, res) => {
     getUser(req.user).then(r => {
         console.log(blue("id: " + r.id + "; Username: " + r.username + "; Has logged out!"));
@@ -80,9 +83,11 @@ export const modifyPermissions = async (req, res) => {
             })
             .catch((err) => console.log(red(err)))
     }
+    const user = await getUser(req.user)
+    const handler = await getUser(id)
+    await webhook.moddedUserPerms(user, handler.username, rank)
 };
 
-//FIXME running multiple times on load of a screen
 export const getUserInfo = (req, res) => {
     let userInfo = {
         authenticated: undefined

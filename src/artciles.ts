@@ -1,4 +1,6 @@
 import {PrismaClient} from "@prisma/client"
+import {getUser} from "./user";
+
 const prisma = new PrismaClient()
 
 const {existsSync, promises, readFileSync, writeFile} = require('fs');
@@ -6,11 +8,11 @@ const Git = require('nodegit');
 const dir = './posts';
 const metadataFile = `${dir}/metadata.json`
 const {greenBright, magenta, red, cyan, yellow} = require('chalk')
-import fetch from 'node-fetch'
+
 
 const utils = require('../utils/utils');
 const users = require('./user');
-
+const webhook = require('./webhooks')
 
 // ===== POST METADATA ===== //
 export class PostMetadata {
@@ -79,30 +81,6 @@ export const setMetadata = async (
     });
 }
 
-export const discordWebhook = async (username, avatar, userid, title, articleid, description, tags) => {
-    fetch('https://discord.com/api/webhooks/805963511791878154/xCNeSXCgk5vQNtE4CSkj_MAHi9eKZ050jj0h6LR-JDYFhTmMjpWtFs0ToOIwq-HKdv7N', {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            "username": "Article Bot",
-            "avatar_url": 'https://static.wikia.nocookie.net/minecraft/images/d/d3/KnowledgeBookNew.png/revision/latest/top-crop/width/220/height/220?cb=20190917030625',
-            "embeds": [{
-                "title": `${title} 📚`,
-                "url": `https://technicalmc.xyz/render-article/${articleid}`,
-                "author": {
-                    "name": username,
-                    "icon_url": `https://cdn.discordapp.com/avatars/${userid}/${avatar}.png`,
-                },
-            }],
-            "description": description,
-            "footer": {
-                "text": tags,
-            },
-        })
-    });
-}
 
 export const handleCreatePost = async (req, res) => {
     const reqBody = utils.cast('object', req.body);
@@ -114,11 +92,9 @@ export const handleCreatePost = async (req, res) => {
     console.log(cyan(`Created post #${metadata.id}`));
 
     const user = await users.getUser(req.user)
-    const username = user.username
-    const userid = user.id
-    const avatar = user.avatar
-    await discordWebhook(username, avatar, userid, title, metadata.id, description, tags);
-
+    await webhook.newArticleWebhook(user, title, metadata.id, description, tags);
+    const article = await getMetadataDB(metadata.id)
+    await webhook.incomingArticle(article.title, metadata.id, article.description, article.tag, user)
     res.send('OK');
 };
 
@@ -136,7 +112,7 @@ export const editArticle = async (req, res) => {
 
     const metadataDB = await getMetadataDB(postId);
     // test to see if the edit count has gone up, outdated
-    if (metadataDB.edit_count !== utils.cast('number', req.body.lastEditCount)){
+    if (metadataDB.edit_count !== utils.cast('number', req.body.lastEditCount)) {
         return res.send('OUTDATED');
     }
     //if it is not updated go on with the edit
@@ -165,8 +141,7 @@ export const getArticle = async (req, res) => {
                 const networkPost = getNetworkPostObject(postId)
                     .then((networkPost) => res.send(networkPost))
                     .catch((err) => res.status(404).send(`No such post ID ${err}`))
-            }
-            else {
+            } else {
                 res.status(404).send(`No such post ID ${postId}`);
                 return;
             }
@@ -198,7 +173,7 @@ export const getPublicArticles = async (req, res) => {
     //
     res.send(myArticles);
 };
-export const getAllArticles = async (req,res)=> {
+export const getAllArticles = async (req, res) => {
     let myArticles = await getAllMetadata();
     res.send(myArticles);
 }
@@ -221,7 +196,7 @@ export const getFeaturedMetadata = async (req, res) => {
         where: {featured: true},
         orderBy: {
             id: 'desc'
-        }
+        },
     })
     res.send(featured)
 }
@@ -252,6 +227,8 @@ export const featureArticle = async (req, res) => {
             console.log(red(err));
             return res.status(403).send(err)
         })
+    const article = await getMetadataDB(id)
+    await webhook.newFeaturedArticle(article.title, id, article.description, article.tag)
 };
 
 export const unfeatureArticle = async (req, res) => {
@@ -295,6 +272,9 @@ export const removeArticle = async (req, res) => {
             console.log(red(err));
             return res.status(403).send(err)
         })
+    const article = await getMetadataDB(id)
+    const user = await getUser(req.user)
+    await webhook.removedArticle(article.title, article.description, article.tag, user)
 };
 
 export const publicizeArticle = async (req, res) => {
@@ -319,6 +299,9 @@ export const publicizeArticle = async (req, res) => {
             console.log(red(err));
             return res.status(403).send(err)
         })
+    const article = await getMetadataDB(id)
+    const user = await getUser(req.user)
+    await webhook.publicizeArticle(article.title, article.description, article.tag, user)
 };
 
 export const privatizeArticle = async (req, res) => {
@@ -343,9 +326,11 @@ export const privatizeArticle = async (req, res) => {
             console.log(red(err));
             return res.status(403).send(err)
         })
+    const article = await getMetadataDB(id)
+    const user = await getUser(req.user)
+    await webhook.privatisedArticle(article.title, article.description, article.tag, user)
 };
-//LEGACY
-export const getMetadata = (postId: number): PostMetadata => postMetadata.get(postId);
+
 
 // get a single articles metadata from the database
 export const getMetadataDB = async (postId: number) =>
@@ -450,6 +435,7 @@ export const createPost = async (author: string, title: string, description: str
     await setPostBody(postId, body);
     await postMetadata.set(postId, metadata);
     await commit(postId, `Create ${title}`, author);
+
     return metadatadb;
 }
 
